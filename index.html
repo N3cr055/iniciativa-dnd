@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>D&D Iniciativa</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <h1>Combate D&D - Orden de Iniciativa</h1>
+
+    <div id="createOrJoin">
+      <button onclick="createRoom()">Crear sala (DM)</button>
+      <input type="text" id="roomCodeInput" placeholder="Código de sala" />
+      <button onclick="joinRoom()">Unirse a sala</button>
+    </div>
+
+    <div id="playerSetup" style="display:none;">
+      <input type="text" id="playerName" placeholder="Tu nombre" />
+      <input type="number" id="playerInit" placeholder="Tu iniciativa" />
+      <button onclick="submitInitiative()">Enviar iniciativa</button>
+    </div>
+
+    <div id="dmControls" style="display:none;">
+      <h3>Agregar enemigo</h3>
+      <input type="text" id="enemyName" placeholder="Nombre enemigo" />
+      <input type="number" id="enemyInit" placeholder="Iniciativa" />
+      <button onclick="addEnemy()">Agregar</button>
+      <button onclick="startCombat()">Iniciar combate</button>
+    </div>
+
+    <div id="combatView" style="display:none;">
+      <h2>Orden de iniciativa</h2>
+      <ul id="initiativeList"></ul>
+      <div id="turnDisplay"></div>
+      <button id="nextTurnBtn" onclick="nextTurn()" style="display:none;">Siguiente turno</button>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
