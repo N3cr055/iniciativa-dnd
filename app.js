@@ -33,11 +33,19 @@ let isDM = false;
 let combatListener = null;
 let isCombatListening = false;
 
-// Función para mostrar código de sala
+// Función para mostrar código de sala - VERSIÓN CORREGIDA
 function updateRoomCodeDisplay() {
-  document.getElementById('roomCodeDisplay').textContent = roomId;
-  document.getElementById('dmRoomCode').textContent = roomId;
-  document.getElementById('combatRoomCode').textContent = roomId;
+  const roomCodeDisplayElem = document.getElementById('roomCodeDisplay');
+  if (roomCodeDisplayElem) {
+    roomCodeDisplayElem.textContent = roomId;
+  }
+
+  // La línea para 'dmRoomCode' ha sido eliminada porque ya no existe en el HTML.
+
+  const combatRoomCodeElem = document.getElementById('combatRoomCode');
+  if (combatRoomCodeElem) {
+    combatRoomCodeElem.textContent = roomId;
+  }
 }
 
 // Función para copiar código de sala
@@ -56,11 +64,11 @@ function cleanupListeners() {
   isCombatListening = false;
 }
 
-// Crear sala (DM)
+// Crear sala (DM) - VERSIÓN CORREGIDA
 function createRoom() {
   cleanupListeners();
   roomId = Math.random().toString(36).substr(2, 6).toUpperCase();
-  
+
   db.ref(`rooms/${roomId}`).set({ 
     players: {}, 
     enemies: {}, 
@@ -70,8 +78,11 @@ function createRoom() {
     isDM = true;
     alert(`Sala creada: ${roomId}`);
     document.getElementById("createOrJoin").style.display = "none";
-    document.getElementById("dmControls").style.display = "block";
+    // Va directo a la vista de combate unificada
+    document.getElementById("combatView").style.display = "block"; 
     updateRoomCodeDisplay();
+    // Inicia el listener de inmediato para el DM
+    listenToCombat(); 
   }).catch(error => {
     console.error("Error creando sala:", error);
     alert("Error al crear sala. Verifica la conexión.");
@@ -149,7 +160,7 @@ function addEnemy() {
     });
 }
 
-// Iniciar combate (DM)
+// Iniciar combate (DM) - VERSIÓN SIMPLIFICADA
 function startCombat() {
   db.ref(`rooms/${roomId}`).once("value", snapshot => {
     const data = snapshot.val();
@@ -163,18 +174,11 @@ function startCombat() {
       return;
     }
     
+    // La única tarea es actualizar el estado en Firebase.
+    // El listener se encargará de los cambios visuales.
     db.ref(`rooms/${roomId}`).update({ 
       started: true, 
       currentCharacter: null 
-    }).then(() => {
-      document.getElementById("dmControls").style.display = "none";
-      document.getElementById("combatView").style.display = "block";
-      document.getElementById("nextTurnBtn").style.display = "inline-block";
-      updateRoomCodeDisplay();
-      
-      if (!isCombatListening) {
-        listenToCombat();
-      }
     }).catch(error => {
       console.error("Error iniciando combate:", error);
       alert("Error al iniciar combate.");
@@ -215,31 +219,48 @@ function editInitiative(characterId, characterType, currentInit) {
   }
 }
 
-// Escuchar cambios de combate - VERSIÓN CORREGIDA
+// Escuchar cambios de combate - VERSIÓN FINAL CORREGIDA
 function listenToCombat() {
-  if (isCombatListening) {
-    console.log("Listener ya está activo, ignorando llamada duplicada");
-    return;
-  }
-  
-  console.log("Iniciando listener de combate...");
-  isCombatListening = true;
-  
+  // Eliminamos la bandera 'isCombatListening' que causaba problemas.
+  // Ahora nos aseguramos de limpiar el listener anterior antes de poner uno nuevo.
   if (combatListener) {
     db.ref(`rooms/${roomId}`).off("value", combatListener);
-    combatListener = null;
   }
   
   combatListener = function(snapshot) {
-    // CORRECCIONES APLICADAS AQUÍ DENTRO
     const data = snapshot.val();
     if (!data) {
-      console.log("No data found for room:", roomId);
+      backToMenu();
+      alert("La sala ha sido cerrada.");
       return;
     }
 
-    console.log("Datos recibidos, procesando...");
-    
+    // --- LÓGICA DE VISIBILIDAD DE CONTROLES DEL DM ---
+    const dmCombatControls = document.getElementById('dmCombatControls');
+    const startCombatBtn = document.getElementById('startCombatBtn');
+    const nextTurnBtn = document.getElementById('nextTurnBtn');
+
+    if (isDM) {
+      // El formulario para añadir enemigos siempre es visible para el DM
+      dmCombatControls.style.display = 'block'; 
+
+      if (data.started) {
+        // Si el combate empezó, muestra "Siguiente Turno"
+        startCombatBtn.style.display = 'none';
+        nextTurnBtn.style.display = 'inline-block';
+      } else {
+        // Si el combate NO ha empezado, muestra "Iniciar Combate"
+        startCombatBtn.style.display = 'inline-block';
+        nextTurnBtn.style.display = 'none';
+      }
+    } else {
+      // Los jugadores nunca ven estos controles
+      dmCombatControls.style.display = 'none';
+      startCombatBtn.style.display = 'none';
+      nextTurnBtn.style.display = 'none';
+    }
+    // --- FIN DE LA LÓGICA DE VISIBILIDAD ---
+
     const allCharacters = [];
     
     if (data.players && typeof data.players === 'object') {
@@ -258,8 +279,6 @@ function listenToCombat() {
       });
     }
     
-    console.log("Personajes encontrados:", allCharacters.length);
-    
     allCharacters.sort((a, b) => b.init - a.init);
     
     const list = document.getElementById("initiativeList");
@@ -267,7 +286,7 @@ function listenToCombat() {
     
     let currentCharacterName = data.currentCharacter;
     
-    if (!currentCharacterName && allCharacters.length > 0) {
+    if (!currentCharacterName && allCharacters.length > 0 && data.started) {
       currentCharacterName = allCharacters[0].name;
       db.ref(`rooms/${roomId}`).update({ currentCharacter: currentCharacterName });
       return;
@@ -337,9 +356,9 @@ function listenToCombat() {
     if (currentCharacterName) {
       document.getElementById("turnDisplay").textContent = `🎯 Turno de: ${currentCharacterName}`;
     } else if (allCharacters.length > 0) {
-        document.getElementById("turnDisplay").textContent = "Esperando el primer turno.";
+        document.getElementById("turnDisplay").textContent = "Combate listo para iniciar.";
     } else {
-        document.getElementById("turnDisplay").textContent = "No hay personajes en combate";
+        document.getElementById("turnDisplay").textContent = "Añade personajes para empezar.";
     }
   };
   

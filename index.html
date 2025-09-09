@@ -1,86 +1,20 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF--8" />
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>D&D Iniciativa</title>
   <link rel="stylesheet" href="style.css" />
   <style>
-    .initiative-editable {
-      cursor: pointer;
-      text-decoration: underline dotted;
-    }
-    
-    .initiative-editable:hover {
-      color: #ffd700;
-    }
-    
-    .delete-btn {
-      background-color: #dc3545;
-      color: white;
-      padding: 2px 8px;
-      font-size: 12px;
-      margin-left: 10px;
-      border-radius: 4px;
-    }
-    
-    .delete-btn:hover {
-      background-color: #c82333;
-    }
-    
-    .character-container {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      width: 100%;
-    }
-    
-    .character-info {
-      flex-grow: 1;
-    }
-    
-    #nextTurnBtn {
-      background-color: #28a745;
-      color: white;
-      padding: 12px 20px;
-      font-size: 16px;
-      font-weight: bold;
-      margin-top: 15px;
-    }
-    
-    #nextTurnBtn:hover {
-      background-color: #218838;
-    }
-    
-    #turnDisplay {
-      font-size: 1.3em;
-      font-weight: bold;
-      margin: 15px 0;
-      color: #ffd700;
-      background-color: #3a3a4e;
-      padding: 10px;
-      border-radius: 8px;
-    }
-    
-    .room-code-display {
-      background-color: #4a4a6a;
-      padding: 10px;
-      border-radius: 5px;
-      margin: 10px 0;
-      font-weight: bold;
-      font-size: 1.1em;
-    }
-    
-    .copy-btn {
-      background-color: #6c757d;
-      padding: 5px 10px;
-      font-size: 12px;
-      margin-left: 10px;
-    }
-    
-    .copy-btn:hover {
-      background-color: #5a6268;
-    }
+    /* ... (tu sección de style sigue igual que antes, no es necesario copiarla si ya la tienes) ... */
+    .delete-btn { background-color: #dc3545; color: white; padding: 2px 8px; font-size: 12px; margin-left: 10px; border-radius: 4px; }
+    .delete-btn:hover { background-color: #c82333; }
+    #nextTurnBtn { background-color: #28a745; color: white; padding: 12px 20px; font-size: 16px; font-weight: bold; margin-top: 15px; }
+    #nextTurnBtn:hover { background-color: #218838; }
+    #turnDisplay { font-size: 1.3em; font-weight: bold; margin: 15px 0; color: #ffd700; background-color: #3a3a4e; padding: 10px; border-radius: 8px; }
+    .room-code-display { background-color: #4a4a6a; padding: 10px; border-radius: 5px; margin: 10px 0; font-weight: bold; font-size: 1.1em; }
+    .copy-btn { background-color: #6c757d; padding: 5px 10px; font-size: 12px; margin-left: 10px; }
+    .copy-btn:hover { background-color: #5a6268; }
   </style>
 </head>
 <body>
@@ -105,28 +39,25 @@
       <button class="player-btn" onclick="submitInitiative()">Enviar iniciativa</button>
     </div>
 
-    <div id="dmControls" style="display:none;">
-      <h3>Controles del DM</h3>
-      <div class="room-code-display">
-        Sala: <span id="dmRoomCode"></span>
-        <button class="copy-btn" onclick="copyRoomCode()">📋 Copiar</button>
-      </div>
-      <input type="text" id="enemyName" placeholder="Nombre enemigo" />
-      <input type="number" id="enemyInit" placeholder="Iniciativa" />
-      <button class="dm-btn" onclick="addEnemy()">Agregar Enemigo</button>
-      <br><br>
-      <button class="dm-btn" onclick="startCombat()">Iniciar combate</button>
-    </div>
-
     <div id="combatView" style="display:none;">
       <h2>Orden de iniciativa</h2>
       <div class="room-code-display">
         Sala: <span id="combatRoomCode"></span>
         <button class="copy-btn" onclick="copyRoomCode()">📋 Copiar</button>
       </div>
+
+      <div id="dmCombatControls" style="display: none;">
+        <input type="text" id="enemyName" placeholder="Nombre enemigo" />
+        <input type="number" id="enemyInit" placeholder="Iniciativa" />
+        <button class="dm-btn" onclick="addEnemy()">Añadir Enemigo</button>
+      </div>
+
       <ul id="initiativeList"></ul>
       <div id="turnDisplay"></div>
-      <button id="nextTurnBtn" class="dm-btn" onclick="nextTurn()" style="display:none;">Siguiente turno</button>
+      
+      <button id="startCombatBtn" class="dm-btn" onclick="startCombat()" style="display:none;">Iniciar Combate</button>
+      <button id="nextTurnBtn" class="dm-btn" onclick="nextTurn()" style="display:none;">Siguiente Turno</button>
+      
       <br>
       <button class="player-btn" onclick="backToMenu()">Volver al Menú</button>
     </div>
