@@ -3,23 +3,29 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>D&D Iniciativa</title>
+  <title>Turno Crítico - Iniciativa D&D</title>
   <link rel="stylesheet" href="style.css" />
   <style>
-    /* ... (tu sección de style sigue igual que antes, no es necesario copiarla si ya la tienes) ... */
     .delete-btn { background-color: #dc3545; color: white; padding: 2px 8px; font-size: 12px; margin-left: 10px; border-radius: 4px; }
     .delete-btn:hover { background-color: #c82333; }
-    #nextTurnBtn { background-color: #28a745; color: white; padding: 12px 20px; font-size: 16px; font-weight: bold; margin-top: 15px; }
-    #nextTurnBtn:hover { background-color: #218838; }
+    #dmNextTurnBtn { background-color: #28a745; color: white; padding: 12px 20px; font-size: 16px; font-weight: bold; margin-top: 15px; }
+    #dmNextTurnBtn:hover { background-color: #218838; }
     #turnDisplay { font-size: 1.3em; font-weight: bold; margin: 15px 0; color: #ffd700; background-color: #3a3a4e; padding: 10px; border-radius: 8px; }
     .room-code-display { background-color: #4a4a6a; padding: 10px; border-radius: 5px; margin: 10px 0; font-weight: bold; font-size: 1.1em; }
     .copy-btn { background-color: #6c757d; padding: 5px 10px; font-size: 12px; margin-left: 10px; }
     .copy-btn:hover { background-color: #5a6268; }
+    /* --- NUEVOS ESTILOS PARA LA AYUDA DE TURNO --- */
+    .action-icons { margin-left: auto; padding-left: 15px; user-select: none; }
+    .action-icon { font-size: 1.1em; cursor: pointer; transition: opacity 0.2s; }
+    .action-icon.used { opacity: 0.3; text-decoration: line-through; }
+    #turnHelper { text-align: left; margin-top: 20px; background-color: #3a3a4e; padding: 15px; border-radius: 8px; }
+    #turnHelper h4 { margin-top: 0; }
+    #turnHelper p { margin: 5px 0; }
   </style>
 </head>
 <body>
   <div id="app">
-    <h1>Combate D&D - Orden de Iniciativa</h1>
+    <h1>Turno Crítico - Orden de Iniciativa</h1>
 
     <div id="createOrJoin">
       <button class="player-btn" onclick="createRoom()">Crear sala (DM)</button>
@@ -36,6 +42,10 @@
       </div>
       <input type="text" id="playerName" placeholder="Tu nombre" />
       <input type="number" id="playerInit" placeholder="Tu iniciativa" />
+      <div>
+        <input type="checkbox" id="actionHelperCheckbox" />
+        <label for="actionHelperCheckbox">Recordarme qué puedo hacer en mi turno</label>
+      </div>
       <button class="player-btn" onclick="submitInitiative()">Enviar iniciativa</button>
     </div>
 
@@ -56,10 +66,20 @@
       <div id="turnDisplay"></div>
       
       <button id="startCombatBtn" class="dm-btn" onclick="startCombat()" style="display:none;">Iniciar Combate</button>
-      <button id="nextTurnBtn" class="dm-btn" onclick="nextTurn()" style="display:none;">Siguiente Turno</button>
+      <button id="dmNextTurnBtn" class="dm-btn" onclick="nextTurn()" style="display:none;">Siguiente Turno (DM)</button>
+      <button id="endCombatBtn" class="dm-btn" onclick="endCombat()" style="display:none; background-color: #dc3545;">Finalizar Combate</button>
+      <button id="playerEndTurnBtn" class="player-btn" onclick="nextTurn()" style="display:none;">Terminar mi Turno</button>
       
       <br>
       <button class="player-btn" onclick="backToMenu()">Volver al Menú</button>
+
+      <div id="turnHelper" style="display: none;">
+        <h4>¿Qué puedes hacer en tu turno?</h4>
+        <p><strong>🏃 Movimiento:</strong> Puedes moverte hasta tu velocidad máxima. Puedes dividirlo antes y después de tu acción.</p>
+        <p><strong>⚔️ Acción:</strong> La acción principal. ¡Atacar, lanzar un conjuro, usar un objeto y mucho más!</p>
+        <p><strong>✨ Acción Adicional (Bonus):</strong> Algunas habilidades o conjuros te dan una acción extra más rápida.</p>
+        <p><strong>🗣️ Interacción Gratuita:</strong> Hablar, abrir una puerta, desenvainar un arma...</p>
+      </div>
     </div>
   </div>
 
