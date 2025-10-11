@@ -3,36 +3,43 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Turno Crítico - Iniciativa D&D</title>
+  <title>Turno Crítico - Combat Tracker</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="icon" type="image/png" href="favicon.png" />
   <style>
-    .delete-btn { background-color: #dc3545; color: white; padding: 2px 8px; font-size: 12px; margin-left: 10px; border-radius: 4px; }
-    .delete-btn:hover { background-color: #c82333; }
-    #dmNextTurnBtn { background-color: #28a745; color: white; padding: 12px 20px; font-size: 16px; font-weight: bold; margin-top: 15px; }
-    #dmNextTurnBtn:hover { background-color: #218838; }
-    #turnDisplay { font-size: 1.3em; font-weight: bold; margin: 15px 0; color: #ffd700; background-color: #3a3a4e; padding: 10px; border-radius: 8px; }
-    .room-code-display { background-color: #4a4a6a; padding: 10px; border-radius: 5px; margin: 10px 0; font-weight: bold; font-size: 1.1em; }
-    .copy-btn { background-color: #6c757d; padding: 5px 10px; font-size: 12px; margin-left: 10px; }
-    .copy-btn:hover { background-color: #5a6268; }
-    /* --- NUEVOS ESTILOS PARA LA AYUDA DE TURNO --- */
-    .action-icons { margin-left: auto; padding-left: 15px; user-select: none; }
-    .action-icon { font-size: 1.1em; cursor: pointer; transition: opacity 0.2s; }
-    .action-icon.used { opacity: 0.3; text-decoration: line-through; }
-    #turnHelper { text-align: left; margin-top: 20px; background-color: #3a3a4e; padding: 15px; border-radius: 8px; }
-    #turnHelper h4 { margin-top: 0; }
-    #turnHelper p { margin: 5px 0; }
+    /* Estilos de Componentes Específicos */
+    .delete-btn { background-color: #6b2b2b; color: white; padding: 2px 8px; font-size: 12px; margin-left: 10px; border-radius: 4px; }
+    .delete-btn:hover { background-color: #8a3a3a; }
+    #dmNextTurnBtn, #playerEndTurnBtn, #startCombatBtn { font-weight: bold; }
+    #turnDisplay { font-size: 1.3em; font-weight: bold; margin: 15px 0; color: #c9a45d; background-color: #1a1612; padding: 10px; border-radius: 8px; }
+    .room-code-display { background-color: #1a1612; padding: 10px; border-radius: 5px; margin: 10px 0; font-weight: bold; font-size: 1.1em; }
+    .copy-btn { background-color: #5a4b3a; padding: 5px 10px; font-size: 12px; margin-left: 10px; color: white; }
+    .copy-btn:hover { filter: brightness(1.2); }
+    .character-info { display: flex; flex-direction: column; flex-grow: 1; }
+    .character-name { font-size: 1.1em; }
+    .hp-bar-container { background-color: #1a1612; border-radius: 5px; height: 12px; margin-top: 5px; border: 1px solid #5a4b3a; overflow: hidden; }
+    .hp-bar { background-color: #3a8a06; height: 100%; transition: width 0.3s ease; }
+    .hp-text-container { font-size: 0.9em; margin-left: auto; padding-left: 15px; user-select: none; cursor: pointer; text-align: center; }
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
+    .modal-content { background-color: #2a231d; padding: 25px; border-radius: 4px; border: 2px solid #5a4b3a; text-align: center; width: 90%; max-width: 300px; box-shadow: 0 0 20px black; }
+    .modal-content h4 { font-family: 'Uncial Antiqua', cursive; color: #c9a45d; margin-top: 0; }
+    .modal-content input { width: 80px; text-align: center; font-size: 1.2em; }
+    .modal-actions { margin-top: 20px; }
+    .input-group { display: flex; flex-direction: column; align-items: flex-start; margin-bottom: 12px; text-align: left; }
+    .input-group label { margin-bottom: 4px; font-size: 0.9em; color: #c9a45d; }
+    .input-group input { width: calc(100% - 22px); }
   </style>
 </head>
 <body>
   <div id="app">
-    <h1>Turno Crítico - Orden de Iniciativa</h1>
+    <h1>Turno Crítico</h1>
 
     <div id="createOrJoin">
-      <button class="player-btn" onclick="createRoom()">Crear sala (DM)</button>
+      <center><button id="rejoinDmBtn" class="dm-btn" onclick="rejoinAsDM()" style="display: none; width: 80%; margin-bottom: 15px;">Reunirte como DM</button></center>
+      <button class="player-btn" onclick="createRoom()">Crear Sala (DM)</button>
       <br>
       <input type="text" id="roomCodeInput" placeholder="Código de sala" />
-      <button class="player-btn" onclick="joinRoom()">Unirse a sala</button>
+      <button class="player-btn" onclick="joinRoom()">Unirse a Sala</button>
     </div>
 
     <div id="playerSetup" style="display:none;">
@@ -41,45 +48,60 @@
         Sala: <span id="roomCodeDisplay"></span>
         <button class="copy-btn" onclick="copyRoomCode()">📋 Copiar</button>
       </div>
-      <input type="text" id="playerName" placeholder="Tu nombre" />
-      <input type="number" id="playerInit" placeholder="Tu iniciativa" />
-      <div>
-        <input type="checkbox" id="actionHelperCheckbox" />
-        <label for="actionHelperCheckbox">Recordarme qué puedo hacer en mi turno</label>
+      <div class="input-group">
+        <label for="playerName">Nombre del Personaje:</label>
+        <input type="text" id="playerName" />
       </div>
-      <button class="player-btn" onclick="submitInitiative()">Enviar iniciativa</button>
+      <div class="input-group">
+        <label for="playerMaxHp">Vida Máxima:</label>
+        <input type="number" id="playerMaxHp" />
+      </div>
+      <div class="input-group">
+        <label for="playerCurrentHp">Vida Actual:</label>
+        <input type="number" id="playerCurrentHp" placeholder="(se usará la máxima si se deja en blanco)" />
+      </div>
+      <div class="input-group">
+        <label for="playerInit">Iniciativa:</label>
+        <input type="number" id="playerInit" />
+      </div>
+      <button class="player-btn" onclick="submitCharacter()">Enviar Personaje</button>
     </div>
 
     <div id="combatView" style="display:none;">
-      <h2>Orden de iniciativa</h2>
+      <h2>Orden de Iniciativa</h2>
       <div class="room-code-display">
         Sala: <span id="combatRoomCode"></span>
         <button class="copy-btn" onclick="copyRoomCode()">📋 Copiar</button>
       </div>
-
       <div id="dmCombatControls" style="display: none;">
         <input type="text" id="enemyName" placeholder="Nombre enemigo" />
         <input type="number" id="enemyInit" placeholder="Iniciativa" />
+        <input type="number" id="enemyMaxHp" placeholder="Vida Máxima" />
         <button class="dm-btn" onclick="addEnemy()">Añadir Enemigo</button>
       </div>
-
       <ul id="initiativeList"></ul>
       <div id="turnDisplay"></div>
-      
       <button id="startCombatBtn" class="dm-btn" onclick="startCombat()" style="display:none;">Iniciar Combate</button>
-      <button id="dmNextTurnBtn" class="dm-btn" onclick="nextTurn()" style="display:none;">Siguiente Turno (DM)</button>
-      <button id="endCombatBtn" class="dm-btn" onclick="endCombat()" style="display:none; background-color: #dc3545;">Finalizar Combate</button>
+      <button id="dmNextTurnBtn" class="dm-btn" onclick="nextTurn()" style="display:none;">Siguiente Turno</button>
       <button id="playerEndTurnBtn" class="player-btn" onclick="nextTurn()" style="display:none;">Terminar mi Turno</button>
-      
+      <button id="endCombatBtn" class="dm-btn" onclick="endCombat()" style="display:none; background-color: #6b2b2b;">Finalizar Combate</button>
       <br>
       <button class="player-btn" onclick="backToMenu()">Volver al Menú</button>
+    </div>
+  </div>
 
-      <div id="turnHelper" style="display: none;">
-        <h4>¿Qué puedes hacer en tu turno?</h4>
-        <p><strong>🏃 Movimiento:</strong> Puedes moverte hasta tu velocidad máxima. Puedes dividirlo antes y después de tu acción.</p>
-        <p><strong>⚔️ Acción:</strong> La acción principal. ¡Atacar, lanzar un conjuro, usar un objeto y mucho más!</p>
-        <p><strong>✨ Acción Adicional (Bonus):</strong> Algunas habilidades o conjuros te dan una acción extra más rápida.</p>
-        <p><strong>🗣️ Interacción Gratuita:</strong> Hablar, abrir una puerta, desenvainar un arma...</p>
+  <div id="hpModal" class="modal-overlay">
+    <div class="modal-content">
+      <h4 id="modalCharName">Modificar Vida</h4>
+      <p>Vida Actual: <span id="modalCurrentHp"></span></p>
+      <div>
+        <input type="number" id="hpChangeInput" placeholder="0" />
+      </div>
+      <div class="modal-actions">
+        <button class="dm-btn" onclick="applyHpChange('damage')">Daño</button>
+        <button class="player-btn" onclick="applyHpChange('healing')">Sanación</button>
+        <br>
+        <button style="margin-top: 10px; background-color: #444;" onclick="closeHpModal()">Cancelar</button>
       </div>
     </div>
   </div>
