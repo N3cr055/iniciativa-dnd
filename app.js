@@ -108,7 +108,7 @@ function joinRoom() {
       isDM = false;
       playerId = sessionStorage.getItem('dnd_room_' + roomId);
 
-      if (playerId && snapshot.val().characters[playerId]) {
+      if (playerId && snapshot.val().characters && snapshot.val().characters[playerId]) {
         showCombatView();
       } else {
         playerId = 'PLAYER_' + generateId();
@@ -171,7 +171,7 @@ function addEnemy() {
   if (!name || isNaN(init) || isNaN(maxHp) || maxHp <= 0) return;
 
   const enemyId = 'ENEMY_' + generateId();
-  const newEnemy = { id: enemyId, name, init, maxHp, currentHp: maxHp, isEnemy: true };
+  const newEnemy = { id: enemyId, name, init, maxHp, currentHp: maxHp, isEnemy: true }; // Los enemigos no tienen showHelper
   db.ref(`rooms/${roomId}/characters/${enemyId}`).set(newEnemy).then(() => {
     document.getElementById("enemyName").value = "";
     document.getElementById("enemyInit").value = "";
@@ -214,14 +214,18 @@ function toggleAction(element) {
   element.classList.toggle('used');
 }
 
-// --- LÓGICA DE COMBATE ---
+// --- LÓGICA DE COMBATE (VERSIÓN MÁS SEGURA) ---
 function listenToCombat() {
   if (combatListener) cleanupListeners();
   combatListener = db.ref(`rooms/${roomId}`).on("value", snapshot => {
     const data = snapshot.val();
-    if (!data) { alert("La sala ha sido cerrada."); backToMenu(); return; }
+    if (!data) { 
+        alert("La sala ha sido cerrada."); 
+        backToMenu(); 
+        return; 
+    }
 
-    const myCharacter = data.characters ? data.characters[playerId] : null;
+    const myCharacter = (data.characters && data.characters[playerId]) ? data.characters[playerId] : null;
     if (myCharacter) {
       localStorage.setItem('dnd_playerCurrentHp', myCharacter.currentHp);
     }
@@ -229,6 +233,7 @@ function listenToCombat() {
     const amICurrentPlayer = data.currentCharacterId === playerId;
     
     const turnHelper = document.getElementById('turnHelper');
+    // **CORRECCIÓN**: Verifica que `myCharacter` exista antes de leer `showHelper`
     if (amICurrentPlayer && myCharacter && myCharacter.showHelper) {
       turnHelper.style.display = 'block';
     } else {
@@ -267,7 +272,7 @@ function listenToCombat() {
           charInfo.appendChild(charName);
 
           const canSeeHp = isDM || char.id === playerId;
-          if (canSeeHp) {
+          if (canSeeHp && char.maxHp) { // Verifica que tenga maxHp para no fallar con datos corruptos
             const hpBarContainer = document.createElement("div");
             hpBarContainer.className = "hp-bar-container";
             const hpBar = document.createElement("div");
@@ -289,7 +294,8 @@ function listenToCombat() {
             container.appendChild(hpDisplay);
           }
 
-          if (char.id === playerId && myCharacter && myCharacter.showHelper) {
+          // **CORRECCIÓN**: Solo muestra los iconos si es un jugador y tiene la opción activada
+          if (char.id === playerId && char.showHelper) {
             const iconsContainer = document.createElement('div');
             iconsContainer.className = 'action-icons';
             iconsContainer.innerHTML = `<span class="action-icon" title="Acción" onclick="toggleAction(this)">⚔️</span><span class="action-icon" title="Acción Adicional" onclick="toggleAction(this)">✨</span><span class="action-icon" title="Movimiento" onclick="toggleAction(this)">🏃</span>`;
@@ -313,7 +319,7 @@ function listenToCombat() {
     }
 
     const turnDisplay = document.getElementById("turnDisplay");
-    const currentCharacter = data.characters ? data.characters[data.currentCharacterId] : null;
+    const currentCharacter = (data.characters && data.currentCharacterId) ? data.characters[data.currentCharacterId] : null;
     if (data.started && currentCharacter) { turnDisplay.textContent = `🎯 Turno de: ${currentCharacter.name}`; }
     else if (data.started) { turnDisplay.textContent = "¡Combate iniciado!"; }
     else { turnDisplay.textContent = "El combate no ha comenzado."; }
@@ -323,7 +329,9 @@ function listenToCombat() {
 function startCombat() {
   if (!isDM) return;
   db.ref(`rooms/${roomId}`).once("value", snapshot => {
-    const characters = snapshot.val().characters ? Object.values(snapshot.val().characters) : [];
+    const data = snapshot.val();
+    if (!data) return;
+    const characters = data.characters ? Object.values(data.characters) : [];
     if (characters.length > 0) {
       characters.sort((a, b) => b.init - a.init);
       db.ref(`rooms/${roomId}`).update({ started: true, currentCharacterId: characters[0].id });
@@ -334,7 +342,7 @@ function startCombat() {
 function nextTurn() {
   db.ref(`rooms/${roomId}`).once("value", snapshot => {
     const data = snapshot.val();
-    if (!data.started || (!isDM && data.currentCharacterId !== playerId)) return;
+    if (!data || !data.started || (!isDM && data.currentCharacterId !== playerId)) return;
 
     const characters = data.characters ? Object.values(data.characters) : [];
     if (characters.length === 0) return;
@@ -354,113 +362,4 @@ function endCombat() {
 }
 
 // --- INICIALIZACIÓN ---
-window.addEventListener('DOMContentLoaded', checkForExistingSession);
-  if (isNaN(currentHp) || currentHp <= 0) { currentHp = maxHp; }
-
-  savePlayerPreferences(name, maxHp, currentHp, showHelper);
-  const newCharacter = {
-    id: playerId, name, init, maxHp, currentHp,
-    isEnemy: false,
-    // **NUEVO**: Guardamos la preferencia en la base de datos para este personaje
-    showHelper: showHelper
-  };
-  db.ref(`rooms/${roomId}/characters/${playerId}`).set(newCharacter).then(showCombatView);
-}
-
-// --- LÓGICA DE COMBATE (ACTUALIZADA) ---
-function listenToCombat() {
-  if (combatListener) cleanupListeners();
-  combatListener = db.ref(`rooms/${roomId}`).on("value", snapshot => {
-    const data = snapshot.val();
-    if (!data) { alert("La sala ha sido cerrada."); backToMenu(); return; }
-
-    const myCharacter = data.characters ? data.characters[playerId] : null;
-    if (myCharacter) { localStorage.setItem('dnd_playerCurrentHp', myCharacter.currentHp); }
-    
-    const amICurrentPlayer = data.currentCharacterId === playerId;
-    
-    // **NUEVO**: Controlar visibilidad del panel de ayuda
-    const turnHelper = document.getElementById('turnHelper');
-    if (amICurrentPlayer && myCharacter && myCharacter.showHelper) {
-      turnHelper.style.display = 'block';
-    } else {
-      turnHelper.style.display = 'none';
-    }
-    
-    // ... (visibilidad de botones no cambia)
-    document.getElementById('dmCombatControls').style.display = isDM ? 'block' : 'none';
-    document.getElementById('startCombatBtn').style.display = isDM && !data.started ? 'inline-block' : 'none';
-    document.getElementById('dmNextTurnBtn').style.display = isDM && data.started ? 'inline-block' : 'none';
-    document.getElementById('playerEndTurnBtn').style.display = !isDM && data.started && amICurrentPlayer ? 'inline-block' : 'none';
-    document.getElementById('endCombatBtn').style.display = isDM && data.started ? 'inline-block' : 'none';
-
-    const list = document.getElementById("initiativeList");
-    list.innerHTML = "";
-    
-    if (!isDM && !data.started) {
-      list.innerHTML = "<li>Esperando a que el DM inicie el combate...</li>";
-    } else {
-      const characters = data.characters ? Object.values(data.characters) : [];
-      if (characters.length > 0) {
-        characters.sort((a, b) => b.init - a.init);
-        characters.forEach(char => {
-          const li = document.createElement("li");
-          const container = document.createElement("div");
-          container.style.display = "flex";
-          container.style.alignItems = "center";
-          container.style.width = "100%";
-          const charInfo = document.createElement("div");
-          charInfo.className = "character-info";
-          const charName = document.createElement("span");
-          charName.className = "character-name";
-          charName.textContent = `${char.name} (${char.init})`;
-          charInfo.appendChild(charName);
-          const canSeeHp = isDM || char.id === playerId;
-          if (canSeeHp) {
-            // ... (lógica de la barra de vida sin cambios)
-          }
-          container.appendChild(charInfo);
-          if (canSeeHp) {
-            // ... (lógica del texto de vida sin cambios)
-          }
-          
-          // **NUEVO**: Añadir los iconos de acción si es el jugador y quiere la ayuda
-          if (char.id === playerId && char.showHelper) {
-            const iconsContainer = document.createElement('div');
-            iconsContainer.className = 'action-icons';
-            iconsContainer.innerHTML = `<span class="action-icon" title="Acción" onclick="toggleAction(this)">⚔️</span><span class="action-icon" title="Acción Adicional" onclick="toggleAction(this)">✨</span><span class="action-icon" title="Movimiento" onclick="toggleAction(this)">🏃</span>`;
-            container.appendChild(iconsContainer);
-          }
-          
-          if (isDM) {
-            // ... (lógica del botón de borrar sin cambios)
-          }
-
-          li.appendChild(container);
-          if (char.isEnemy) li.classList.add("enemy");
-          if (char.id === data.currentCharacterId) li.classList.add("current-turn");
-          list.appendChild(li);
-        });
-      }
-    }
-    // ... (lógica del display de turno sin cambios)
-  });
-}
-
-// **FUNCIÓN RESTAURADA**
-function toggleAction(element) {
-  element.classList.toggle('used');
-}
-
-
-// --- El resto de funciones (addEnemy, removeCharacter, modales, nextTurn, etc.) no necesitan cambios ---
-// ... (copia y pega el resto de las funciones desde el código anterior)
-function addEnemy() { if (!isDM) return; const name = document.getElementById("enemyName").value.trim(); const init = parseInt(document.getElementById("enemyInit").value); const maxHp = parseInt(document.getElementById("enemyMaxHp").value); if (!name || isNaN(init) || isNaN(maxHp) || maxHp <= 0) return; const enemyId = 'ENEMY_' + generateId(); const newEnemy = { id: enemyId, name, init, maxHp, currentHp: maxHp, isEnemy: true }; db.ref(`rooms/${roomId}/characters/${enemyId}`).set(newEnemy).then(() => { document.getElementById("enemyName").value = ""; document.getElementById("enemyInit").value = ""; document.getElementById("enemyMaxHp").value = ""; }); }
-function removeCharacter(characterId) { if (!isDM) return; if (confirm("¿Estás seguro de eliminar este personaje?")) { db.ref(`rooms/${roomId}/characters/${characterId}`).remove(); } }
-function openHpModal(charId, charName, currentHp) { modalTarget = { charId, currentHp }; document.getElementById('modalCharName').textContent = `Modificar Vida de ${charName}`; document.getElementById('modalCurrentHp').textContent = currentHp; document.getElementById('hpChangeInput').value = ''; document.getElementById('hpModal').style.display = 'flex'; }
-function closeHpModal() { document.getElementById('hpModal').style.display = 'none'; }
-function applyHpChange(type) { const changeValue = parseInt(document.getElementById('hpChangeInput').value); if (isNaN(changeValue) || changeValue < 0) return; let newHp = (type === 'damage') ? modalTarget.currentHp - changeValue : modalTarget.currentHp + changeValue; if (newHp < 0) newHp = 0; db.ref(`rooms/${roomId}/characters/${modalTarget.charId}/currentHp`).set(newHp); closeHpModal(); }
-function startCombat() { if (!isDM) return; db.ref(`rooms/${roomId}`).once("value", snapshot => { const characters = snapshot.val().characters ? Object.values(snapshot.val().characters) : []; if (characters.length > 0) { characters.sort((a, b) => b.init - a.init); db.ref(`rooms/${roomId}`).update({ started: true, currentCharacterId: characters[0].id }); } }); }
-function nextTurn() { db.ref(`rooms/${roomId}`).once("value", snapshot => { const data = snapshot.val(); if (!data.started || (!isDM && data.currentCharacterId !== playerId)) return; const characters = data.characters ? Object.values(data.characters) : []; if (characters.length === 0) return; characters.sort((a, b) => b.init - a.init); const currentIndex = data.currentCharacterId ? characters.findIndex(c => c.id === data.currentCharacterId) : -1; const nextIndex = (currentIndex + 1) % characters.length; db.ref(`rooms/${roomId}`).update({ currentCharacterId: characters[nextIndex].id }); }); }
-function endCombat() { if (!isDM) return; if (confirm("¿Finalizar el combate? Se reiniciará el orden de turno y se conservará la vida actual de los personajes.")) { db.ref(`rooms/${roomId}`).update({ started: false, currentCharacterId: null }); } }
 window.addEventListener('DOMContentLoaded', checkForExistingSession);
