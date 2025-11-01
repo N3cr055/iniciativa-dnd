@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -8,7 +7,7 @@
   <link rel="stylesheet" href="style.css" />
   <link rel="icon" type="image/png" href="favicon.png" />
   <style>
-    /* Estilos de Componentes Específicos */
+    /* Estilos internos (la mayoría sin cambios) */
     .delete-btn { background-color: #6b2b2b; color: white; padding: 2px 8px; font-size: 12px; margin-left: 10px; border-radius: 4px; }
     .delete-btn:hover { background-color: #8a3a3a; }
     #dmNextTurnBtn, #playerEndTurnBtn, #startCombatBtn { font-weight: bold; }
@@ -28,12 +27,45 @@
     .modal-actions { margin-top: 20px; }
     .input-group { display: flex; flex-direction: column; align-items: flex-start; margin-bottom: 12px; text-align: left; }
     .input-group label { margin-bottom: 4px; font-size: 0.9em; color: #c9a45d; }
-    .input-group input { width: calc(100% - 22px); }
-    /* Estilos para la ayuda de turno */
+    .input-group input, .input-group select { width: calc(100% - 22px); padding: 10px; font-family: 'Lora', serif; color: #dcdcdc; background-color: #1a1612; border: 1px solid #5a4b3a; border-radius: 2px; }
     #turnHelper { text-align: left; margin-top: 20px; background-color: #2a231d; border: 1px dashed #5a4b3a; padding: 15px; border-radius: 8px; }
     .action-icons { margin-left: auto; padding-left: 15px; user-select: none; display: flex; gap: 8px; }
     .action-icon { font-size: 1.1em; cursor: pointer; transition: opacity 0.2s; filter: grayscale(50%); }
     .action-icon.used { opacity: 0.3; text-decoration: line-through; filter: grayscale(100%); }
+
+    /* --- ESTILOS - FASE 2 (ACTUALIZADOS) --- */
+    .setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+    .stat-box { display: flex; flex-direction: column; align-items: center; background-color: #1a1612; padding: 5px; border-radius: 4px; border: 1px solid #5a4b3a; }
+    .stat-box label { font-size: 0.8em; color: #c9a45d; }
+    .stat-box input { width: 40px; text-align: center; font-size: 1.1em; padding: 5px; }
+    .stat-modifier { font-size: 1.2em; font-weight: bold; color: #c9a45d; margin-top: 2px; height: 1.2em; }
+    #characterPanel { position: relative; background-color: #1a1612; border: 1px solid #5a4b3a; border-radius: 4px; padding: 15px; margin-top: 20px; text-align: left; }
+    .close-panel-btn {
+      position: absolute; top: 10px; right: 15px; font-size: 1.2em; color: #c9a45d;
+      cursor: pointer; font-family: Arial, sans-serif; font-weight: bold;
+    }
+    .close-panel-btn:hover { color: white; }
+    #inspirationTracker { display: flex; justify-content: space-between; align-items: center; background-color: #2a231d; padding: 10px; border-radius: 4px; margin-bottom: 15px; }
+    #inspirationTracker label { font-size: 1.2em; color: #c9a45d; }
+    #inspirationTracker span { font-size: 1.5em; font-weight: bold; }
+    .dm-tool-btn {
+      background-color: #5a4b3a; color: white; border: none; border-radius: 4px;
+      padding: 2px 8px; font-size: 12px; margin-left: 5px; cursor: pointer;
+    }
+    .dm-tool-btn:hover { filter: brightness(1.2); }
+    #spellSlotGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .spell-level { display: flex; align-items: center; background-color: #2a231d; padding: 8px; border-radius: 4px; }
+    .spell-level label { color: #c9a45d; font-weight: bold; margin-right: 10px; }
+    .spell-level span { margin: 0 5px; }
+    .character-name-clickable { cursor: pointer; text-decoration: underline; text-decoration-color: #5a4b3a; }
+    .character-name-clickable:hover { text-decoration-color: #c9a45d; }
+    input:disabled { background-color: #3a3a4e; color: #888; opacity: 0.7; }
+    
+    /* --- NUEVOS ESTILOS PARA CLARIDAD DE CONJUROS --- */
+    .spell-input-group { display: flex; flex-direction: column; align-items: center; }
+    .spell-input-group label { font-size: 0.7em; color: #888; text-transform: uppercase; margin-bottom: 2px; }
+    .spell-level input { width: 35px; text-align: center; }
   </style>
 </head>
 <body>
@@ -50,56 +82,101 @@
 
     <div id="playerSetup" style="display:none;">
       <h3>Unirse al Combate</h3>
-      <div class="room-code-display">
-        Sala: <span id="roomCodeDisplay"></span>
-        <button class="copy-btn" onclick="copyRoomCode()">📋 Copiar</button>
+      <div class="room-code-display"> Sala: <span id="roomCodeDisplay"></span> <button class="copy-btn" onclick="copyRoomCode()">📋 Copiar</button> </div>
+      <div class="input-group"> <label for="playerName">Nombre:</label> <input type="text" id="playerName" /> </div>
+      
+      <div class="setup-grid">
+        <div class="input-group"> <label for="playerLevel">Nivel:</label> <input type="number" id="playerLevel" value="1" min="1" max="20" /> </div>
+        <div class="input-group">
+          <label for="playerClass">Clase:</label>
+          <select id="playerClass">
+            <option value="Artificer">Artífice</option>
+            <option value="Barbarian">Bárbaro</option>
+            <option value="Bard">Bardo</option>
+            <option value="Cleric">Clérigo</option>
+            <option value="Druid">Druida</option>
+            <option value="Fighter">Guerrero (Fighter)</option>
+            <option value="Monk">Monje</option>
+            <option value="Paladin">Paladín</option>
+            <option value="Ranger">Explorador (Ranger)</option>
+            <option value="Rogue">Pícaro (Rogue)</option>
+            <option value="Sorcerer">Hechicero (Sorcerer)</option>
+            <option value="Warlock">Brujo (Warlock)</option>
+            <option value="Wizard">Mago (Wizard)</option>
+            <option value="Other">Otro</option>
+          </select>
+        </div>
       </div>
-      <div class="input-group">
-        <label for="playerName">Nombre del Personaje:</label>
-        <input type="text" id="playerName" />
+
+      <div class="setup-grid">
+        <div class="input-group"> <label for="playerMaxHp">Vida Máxima:</label> <input type="number" id="playerMaxHp" /> </div>
+        <div class="input-group"> <label for="playerCurrentHp">Vida Actual:</label> <input type="number" id="playerCurrentHp" placeholder="(max)" /> </div>
       </div>
-      <div class="input-group">
-        <label for="playerMaxHp">Vida Máxima:</label>
-        <input type="number" id="playerMaxHp" />
-      </div>
-      <div class="input-group">
-        <label for="playerCurrentHp">Vida Actual:</label>
-        <input type="number" id="playerCurrentHp" placeholder="(se usará la máxima si se deja en blanco)" />
-      </div>
-      <div class="input-group">
-        <label for="playerInit">Iniciativa:</label>
-        <input type="number" id="playerInit" />
+
+      <div class="input-group"> <label for="playerInit">Iniciativa:</label> <input type="number" id="playerInit" /> </div>
+      
+      <label style="color: #c9a45d; font-size: 0.9em; text-align: left; margin-left: 5px;">Estadísticas (Opcional):</label>
+      <div class="stats-grid">
+        <div class="stat-box"> <label>FUE</label> <input type="number" id="playerSTR" placeholder="10" /> <span id="playerSTR_mod" class="stat-modifier"></span> </div>
+        <div class="stat-box"> <label>DES</label> <input type="number" id="playerDEX" placeholder="10" /> <span id="playerDEX_mod" class="stat-modifier"></span> </div>
+        <div class="stat-box"> <label>CON</label> <input type="number" id="playerCON" placeholder="10" /> <span id="playerCON_mod" class="stat-modifier"></span> </div>
+        <div class="stat-box"> <label>INT</label> <input type="number" id="playerINT" placeholder="10" /> <span id="playerINT_mod" class="stat-modifier"></span> </div>
+        <div class="stat-box"> <label>SAB</label> <input type="number" id="playerWIS" placeholder="10" /> <span id="playerWIS_mod" class="stat-modifier"></span> </div>
+        <div class="stat-box"> <label>CAR</label> <input type="number" id="playerCHA" placeholder="10" /> <span id="playerCHA_mod" class="stat-modifier"></span> </div>
       </div>
       
       <div style="display: flex; align-items: center; margin: 15px 0; text-align: left;">
         <input type="checkbox" id="actionHelperCheckbox" style="width: auto; margin-right: 10px;" />
         <label for="actionHelperCheckbox" style="font-size: 0.9em;">Recordarme qué puedo hacer en mi turno</label>
       </div>
-
       <button class="player-btn" onclick="submitCharacter()">Enviar Personaje</button>
     </div>
 
     <div id="combatView" style="display:none;">
       <h2>Orden de Iniciativa</h2>
-      <div class="room-code-display">
-        Sala: <span id="combatRoomCode"></span>
-        <button class="copy-btn" onclick="copyRoomCode()">📋 Copiar</button>
-      </div>
+      <div class="room-code-display"> Sala: <span id="combatRoomCode"></span> <button class="copy-btn" onclick="copyRoomCode()">📋 Copiar</button> </div>
       <div id="dmCombatControls" style="display: none;">
         <input type="text" id="enemyName" placeholder="Nombre enemigo" />
         <input type="number" id="enemyInit" placeholder="Iniciativa" />
         <input type="number" id="enemyMaxHp" placeholder="Vida Máxima" />
         <button class="dm-btn" onclick="addEnemy()">Añadir Enemigo</button>
       </div>
+      
       <ul id="initiativeList"></ul>
       <div id="turnDisplay"></div>
+
+      <div id="characterPanel" style="display: none;" data-viewing-playerid="">
+        <span class="close-panel-btn" onclick="hideCharacterPanel()" title="Cerrar Panel">[X]</span>
+        <h3 id="characterPanelTitle" style="margin-top: 0;">Mi Personaje</h3>
+        
+        <div id="inspirationTracker">
+          <label>Inspiración:</label>
+          <span><span id="inspirationCount">0</span> / 3</span>
+          <button id="spendInspirationBtn" class="player-btn" style="padding: 5px 10px; font-size: 12px;" onclick="spendInspiration()">Gastar</button>
+        </div>
+        
+        <div class="stats-grid">
+           <div class="stat-box"> <label>FUE</label> <input type="number" id="statSTR" onchange="updateStat(this, 'str')"> <span id="statSTR_mod" class="stat-modifier"></span> </div>
+           <div class="stat-box"> <label>DES</label> <input type="number" id="statDEX" onchange="updateStat(this, 'dex')"> <span id="statDEX_mod" class="stat-modifier"></span> </div>
+           <div class="stat-box"> <label>CON</label> <input type="number" id="statCON" onchange="updateStat(this, 'con')"> <span id="statCON_mod" class="stat-modifier"></span> </div>
+           <div class="stat-box"> <label>INT</label> <input type="number" id="statINT" onchange="updateStat(this, 'int')"> <span id="statINT_mod" class="stat-modifier"></span> </div>
+           <div class="stat-box"> <label>SAB</label> <input type="number" id="statWIS" onchange="updateStat(this, 'wis')"> <span id="statWIS_mod" class="stat-modifier"></span> </div>
+           <div class="stat-box"> <label>CAR</label> <input type="number" id="statCHA" onchange="updateStat(this, 'cha')"> <span id="statCHA_mod" class="stat-modifier"></span> </div>
+        </div>
+        
+        <div id="spellSlots">
+          <h4 id="spellSlotsTitle">Espacios de Conjuro</h4>
+          <div id="spellSlotGrid">
+            </div>
+        </div>
+      </div>
+
       <button id="startCombatBtn" class="dm-btn" onclick="startCombat()" style="display:none;">Iniciar Combate</button>
       <button id="dmNextTurnBtn" class="dm-btn" onclick="nextTurn()" style="display:none;">Siguiente Turno</button>
       <button id="playerEndTurnBtn" class="player-btn" onclick="nextTurn()" style="display:none;">Terminar mi Turno</button>
       <button id="endCombatBtn" class="dm-btn" onclick="endCombat()" style="display:none; background-color: #6b2b2b;">Finalizar Combate</button>
       <br>
       <button class="player-btn" onclick="backToMenu()">Volver al Menú</button>
-
       <div id="turnHelper" style="display: none;">
         <h4>¿Qué puedes hacer en tu turno?</h4>
         <p><strong>🏃 Movimiento:</strong> Puedes moverte hasta tu velocidad máxima.</p>

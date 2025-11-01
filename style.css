@@ -53,6 +53,11 @@ input {
   font-family: 'Lora', serif;
 }
 input::placeholder { color: #888; }
+/* Específico para el checkbox de ayuda */
+input[type="checkbox"] {
+    margin: 0;
+    padding: 0;
+}
 
 /* --- Botones --- */
 button {
@@ -105,4 +110,213 @@ li.enemy.current-turn {
   background-color: rgba(138, 43, 6, 0.3);
   border-left: 4px solid var(--color-dm);
   color: #ffaf87;
+}
+
+/* --- NUEVOS ESTILOS - FASE 2 --- */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.stat-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: var(--color-fondo);
+  padding: 5px;
+  border-radius: 4px;
+  border: 1px solid var(--color-borde);
+}
+.stat-box label {
+  font-size: 0.8em;
+  color: var(--color-destacado);
+  font-family: 'Lora', serif;
+  text-transform: uppercase;
+}
+.stat-box input {
+  width: 40px; text-align: center; font-size: 1.1em; padding: 5px;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.stat-box input::-webkit-outer-spin-button,
+.stat-box input::-webkit-inner-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
+#characterPanel {
+  background-color: #1a1612; border: 1px solid var(--color-borde);
+  border-radius: 4px; padding: 15px; margin-top: 20px; text-align: left;
+}
+#inspirationTracker {
+  display: flex; align-items: center; gap: 10px;
+  background-color: var(--color-contenedor);
+  padding: 10px; border-radius: 4px; margin-bottom: 15px;
+}
+#inspirationTracker label { font-family: 'Lora', serif; font-weight: bold; }
+#inspirationIcon {
+  font-size: 2em; cursor: pointer;
+  filter: grayscale(1) opacity(0.5); transition: all 0.2s;
+}
+#inspirationIcon.active {
+  filter: grayscale(0) opacity(1);
+  text-shadow: 0 0 10px gold; transform: scale(1.1);
+}
+.dm-inspire-btn {
+  background-color: var(--color-destacado); color: var(--color-fondo);
+  border: none; border-radius: 4px; padding: 2px 8px;
+  font-size: 12px; margin-left: 10px; font-weight: bold; cursor: pointer;
+}
+.dm-inspire-btn:hover { filter: brightness(1.2); }
+#spellSlotGrid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.spell-level {
+  display: flex; align-items: center; background-color: var(--color-contenedor);
+  padding: 8px; border-radius: 4px; border: 1px solid var(--color-borde);
+}
+.spell-level label { color: var(--color-destacado); font-weight: bold; margin-right: 10px; font-size: 0.9em; }
+.spell-level input {
+  width: 35px; text-align: center; padding: 5px; font-size: 1em;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.spell-level input::-webkit-outer-spin-button,
+.spell-level input::-webkit-inner-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
+.spell-level span { margin: 0 5px; color: var(--color-destacado); }
+/* Estilo para el nombre clicable para el DM */
+.character-name-clickable {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: #5a4b3a; /* Un subrayado sutil */
+    text-decoration-thickness: 1px;
+    transition: text-decoration-color 0.2s;
+}
+.character-name-clickable:hover {
+    text-decoration-color: var(--color-destacado); /* Resalta al pasar el mouse */
+}
+/* --- NUEVOS ESTILOS - FASE 2 (ACTUALIZADOS) --- */
+.setup-grid { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: 10px; 
+}
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.stat-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: var(--color-fondo);
+  padding: 5px;
+  border-radius: 4px;
+  border: 1px solid var(--color-borde);
+}
+.stat-box label {
+  font-size: 0.8em;
+  color: var(--color-destacado);
+  font-family: 'Lora', serif;
+  text-transform: uppercase;
+}
+.stat-box input {
+  width: 40px; text-align: center; font-size: 1.1em; padding: 5px;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.stat-box input::-webkit-outer-spin-button,
+.stat-box input::-webkit-inner-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
+.stat-modifier { 
+  font-size: 1.2em; 
+  font-weight: bold; 
+  color: var(--color-destacado); 
+  margin-top: 2px; 
+  height: 1.2em; /* Asegura espacio aunque esté vacío */
+}
+#characterPanel {
+  position: relative; /* Para el botón de cerrar */
+  background-color: #1a1612; border: 1px solid var(--color-borde);
+  border-radius: 4px; padding: 15px; margin-top: 20px; text-align: left;
+}
+.close-panel-btn {
+  position: absolute; top: 10px; right: 15px; font-size: 1.2em; color: #c9a45d;
+  cursor: pointer; font-family: Arial, sans-serif; font-weight: bold;
+}
+.close-panel-btn:hover { color: white; }
+#inspirationTracker {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--color-contenedor);
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+}
+#inspirationTracker label { 
+  font-size: 1.2em; 
+  color: var(--color-destacado); 
+  font-family: 'Lora', serif;
+  font-weight: bold;
+}
+#inspirationTracker span { 
+  font-size: 1.5em; 
+  font-weight: bold; 
+}
+/* Botones de herramienta del DM en la lista */
+.dm-tool-btn {
+  background-color: var(--color-borde);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  margin-left: 5px;
+  cursor: pointer;
+  font-weight: bold;
+}
+.dm-tool-btn:hover {
+  filter: brightness(1.2);
+}
+#spellSlotGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.spell-level {
+  display: flex;
+  align-items: center;
+  background-color: var(--color-contenedor);
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--color-borde);
+}
+.spell-level label { color: var(--color-destacado); font-weight: bold; margin-right: 10px; font-size: 0.9em; }
+.spell-level input {
+  width: 35px; text-align: center; padding: 5px; font-size: 1em;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.spell-level input::-webkit-outer-spin-button,
+.spell-level input::-webkit-inner-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
+.spell-level span { margin: 0 5px; color: var(--color-destacado); }
+/* Estilo para el nombre clicable para el DM */
+.character-name-clickable {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: #5a4b3a; 
+    text-decoration-thickness: 1px;
+    transition: text-decoration-color 0.2s;
+}
+.character-name-clickable:hover {
+    text-decoration-color: var(--color-destacado); 
+}
+/* Estilos para inputs deshabilitados */
+input:disabled {
+  background-color: #3a3a4e;
+  color: #888;
+  opacity: 0.7;
 }
