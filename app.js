@@ -245,9 +245,9 @@ document.getElementById('enemyName').addEventListener('input', (e) => {
     suggestionsBox.innerHTML = '<li style="padding: 8px 12px; color: #888;">Buscando...</li>';
     suggestionsBox.style.display = 'block';
 
-    // Buscamos en la API (v1) después de 400ms de dejar de escribir
+    // ¡EL CAMBIO ESTÁ AQUÍ! Usamos name__icontains en lugar de search
     searchTimeout = setTimeout(() => {
-        fetch(`https://api.open5e.com/v1/monsters/?search=${query}&limit=5`)
+        fetch(`https://api.open5e.com/v1/monsters/?name__icontains=${query}&limit=5`)
         .then(res => {
             if (!res.ok) throw new Error("Error de conexión");
             return res.json();
