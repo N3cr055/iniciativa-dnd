@@ -20,7 +20,7 @@ const db = firebase.database();
 let roomId = null; let playerId = null; let isDM = false; let combatListener = null;
 let modalTarget = { charId: null, currentHp: 0 };
 let dmViewingPlayerId = null;
-let isPlayerPanelOpen = true; // Controla si el jugador quiere ver su panel
+let isPlayerPanelOpen = true; 
 
 // --- FUNCIONES DE UTILIDAD ---
 function generateId() { return Math.random().toString(36).substr(2, 9); }
@@ -32,8 +32,21 @@ function updateRoomCodeDisplay() {
 }
 function copyRoomCode() { navigator.clipboard.writeText(roomId).then(() => alert('Código copiado: ' + roomId)); }
 function cleanupListeners() { if (combatListener && roomId) db.ref(`rooms/${roomId}`).off("value", combatListener); combatListener = null; }
+
 function backToMenu() { 
+  // Solo esconde la pantalla, NO borra la sesión. Permite reconexión si recargan.
+  document.getElementById("combatView").style.display = "none"; 
+  document.getElementById("playerSetup").style.display = "none"; 
+  document.getElementById("createOrJoin").style.display = "block"; 
+}
+
+// FASE 3: Botón para salir por completo de la sala y limpiar la memoria
+function disconnectAndMenu() {
   cleanupListeners(); 
+  if (roomId) {
+      localStorage.removeItem('dnd_room_' + roomId);
+  }
+  localStorage.removeItem('dnd_lastRoom');
   roomId = null; 
   isDM = false; 
   dmViewingPlayerId = null; 
@@ -42,7 +55,7 @@ function backToMenu() {
   document.getElementById("combatView").style.display = "none"; 
   document.getElementById("playerSetup").style.display = "none"; 
   document.getElementById("createOrJoin").style.display = "block"; 
-  checkForExistingSession(); 
+  checkForExistingSession();
 }
 
 // --- LÓGICA DE SESIÓN Y PREFERENCIAS ---
@@ -126,13 +139,16 @@ function joinRoom() {
   db.ref(`rooms/${inputRoomId}`).once("value", snapshot => {
     if (snapshot.exists()) {
       cleanupListeners(); roomId = inputRoomId; isDM = false;
-      playerId = sessionStorage.getItem('dnd_room_' + roomId); 
+      
+      // FASE 3: Cambiado de sessionStorage a localStorage
+      playerId = localStorage.getItem('dnd_room_' + roomId); 
+      localStorage.setItem('dnd_lastRoom', roomId); // Recordamos la última sala
+      
       if (playerId && snapshot.val().characters && snapshot.val().characters[playerId]) {
         showCombatView();
       } else {
         playerId = 'PLAYER_' + generateId();
-        // **AQUÍ ESTABA EL ERROR - CORREGIDO**
-        sessionStorage.setItem('dnd_room_' + roomId, playerId); 
+        localStorage.setItem('dnd_room_' + roomId, playerId); 
         loadPlayerPreferences();
         document.getElementById("createOrJoin").style.display = "none";
         document.getElementById("playerSetup").style.display = "block";
@@ -140,6 +156,7 @@ function joinRoom() {
       }
     } else {
       alert("Sala no encontrada.");
+      localStorage.removeItem('dnd_lastRoom'); // Limpiar si la sala ya no existe
     }
   });
 }
@@ -198,18 +215,127 @@ function submitCharacter() {
   db.ref(`rooms/${roomId}/characters/${playerId}`).set(newCharacter).then(showCombatView);
 }
 
+// --- LÓGICA DE ENEMIGOS Y API (BESTIARIO) ---
+let currentEnemyStats = null;
+let currentEnemyDexMod = 0;
+let searchTimeout = null;
+
+// Escuchador para el buscador de monstruos
+document.getElementById('enemyName').addEventListener('input', (e) => {
+    clearTimeout(searchTimeout);
+    const query = e.target.value.trim().toLowerCase();
+    const suggestionsBox = document.getElementById('monsterSuggestions');
+    
+    // Si borran el texto, limpiamos los datos guardados
+    if (query.length === 0) {
+        currentEnemyStats = null;
+        currentEnemyDexMod = 0;
+        document.getElementById("enemyDexDisplay").textContent = "+0";
+        suggestionsBox.style.display = 'none';
+        return;
+    }
+
+    // Esperar al menos 3 letras para no saturar la API
+    if (query.length < 3) {
+        suggestionsBox.style.display = 'none';
+        return;
+    }
+
+    // MOSTRAR INDICADOR DE CARGA
+    suggestionsBox.innerHTML = '<li style="padding: 8px 12px; color: #888;">Buscando...</li>';
+    suggestionsBox.style.display = 'block';
+
+    // Buscamos en la API (v1) después de 400ms de dejar de escribir
+    searchTimeout = setTimeout(() => {
+        fetch(`https://api.open5e.com/v1/monsters/?search=${query}&limit=5`)
+        .then(res => {
+            if (!res.ok) throw new Error("Error de conexión");
+            return res.json();
+        })
+        .then(data => {
+            suggestionsBox.innerHTML = '';
+            if(data.results && data.results.length > 0) {
+                data.results.forEach(monster => {
+                    const li = document.createElement('li');
+                    li.style.padding = '8px 12px';
+                    li.style.cursor = 'pointer';
+                    li.style.borderBottom = '1px solid #5a4b3a';
+                    li.style.color = '#c9a45d';
+                    li.textContent = `${monster.name} (HP: ${monster.hit_points})`;
+                    
+                    // Efecto hover
+                    li.onmouseover = () => li.style.backgroundColor = '#2a231d';
+                    li.onmouseout = () => li.style.backgroundColor = 'transparent';
+                    
+                    li.onclick = () => selectMonster(monster);
+                    suggestionsBox.appendChild(li);
+                });
+            } else {
+                // Si la API no encuentra nada (ej: si buscó en español)
+                suggestionsBox.innerHTML = '<li style="padding: 8px 12px; color: #ff4c4c;">No encontrado (Intenta en Inglés)</li>';
+            }
+        }).catch(err => {
+            console.error("Error buscando monstruo:", err);
+            suggestionsBox.innerHTML = '<li style="padding: 8px 12px; color: #ff4c4c;">Error de conexión API</li>';
+        });
+    }, 400); 
+});
+// Cuando el DM hace clic en un monstruo de la lista
+function selectMonster(monster) {
+    document.getElementById('enemyName').value = monster.name;
+    document.getElementById('enemyMaxHp').value = monster.hit_points;
+    
+    currentEnemyStats = {
+        str: monster.strength,
+        dex: monster.dexterity,
+        con: monster.constitution,
+        int: monster.intelligence,
+        wis: monster.wisdom,
+        cha: monster.charisma
+    };
+    
+    currentEnemyDexMod = calculateModifier(monster.dexterity);
+    const dexDisplay = document.getElementById('enemyDexDisplay');
+    dexDisplay.textContent = (currentEnemyDexMod >= 0 ? '+' : '') + currentEnemyDexMod;
+    
+    document.getElementById('monsterSuggestions').style.display = 'none';
+}
+
+// Función modificada para añadir al enemigo con las stats
 function addEnemy() {
   if (!isDM) return;
   const name = document.getElementById("enemyName").value.trim();
-  const init = parseInt(document.getElementById("enemyInit").value);
+  const rawRoll = parseInt(document.getElementById("enemyInit").value);
   const maxHp = parseInt(document.getElementById("enemyMaxHp").value);
-  if (!name || isNaN(init) || isNaN(maxHp) || maxHp <= 0) return;
+  
+  if (!name || isNaN(rawRoll) || isNaN(maxHp) || maxHp <= 0) {
+      alert("Por favor, ponle nombre, su tirada en el d20 y su vida.");
+      return;
+  }
+  
+  // ¡Aquí sumamos la tirada física del DM + la Destreza del monstruo!
+  const finalInit = rawRoll + currentEnemyDexMod;
   const enemyId = 'ENEMY_' + generateId();
-  const newEnemy = { id: enemyId, name, init, maxHp, currentHp: maxHp, isEnemy: true };
+  
+  const newEnemy = { 
+      id: enemyId, 
+      name: name, 
+      init: finalInit, 
+      maxHp: maxHp, 
+      currentHp: maxHp, 
+      isEnemy: true,
+      // Si el DM no usó la API, le ponemos stats en 10 por defecto
+      stats: currentEnemyStats || {str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10} 
+  };
+  
   db.ref(`rooms/${roomId}/characters/${enemyId}`).set(newEnemy).then(() => {
+    // Limpiamos todo para el siguiente monstruo
     document.getElementById("enemyName").value = "";
     document.getElementById("enemyInit").value = "";
     document.getElementById("enemyMaxHp").value = "";
+    document.getElementById("enemyDexDisplay").textContent = "+0";
+    currentEnemyStats = null;
+    currentEnemyDexMod = 0;
   });
 }
 
@@ -244,7 +370,6 @@ function toggleAction(element) {
   element.classList.toggle('used');
 }
 
-// --- NUEVAS FUNCIONES (FASE 2 - ACTUALIZADAS) ---
 function calculateModifier(score) {
     return Math.floor((parseInt(score) - 10) / 2);
 }
@@ -410,9 +535,16 @@ function hideCharacterPanel() {
 // --- LÓGICA DE COMBATE ---
 function listenToCombat() {
   if (combatListener) cleanupListeners();
+  
   combatListener = db.ref(`rooms/${roomId}`).on("value", snapshot => {
     const data = snapshot.val();
-    if (!data) { alert("La sala ha sido cerrada."); backToMenu(); return; }
+    
+    // 1. SI LA SALA YA NO EXISTE (El DM usó "Finalizar Combate")
+    if (!data) { 
+        alert("El DM ha finalizado el combate. La sala se ha cerrado."); 
+        disconnectAndMenu(); // Limpiamos la sesión y mandamos al menú
+        return; 
+    }
 
     const myCharacter = (data.characters && data.characters[playerId]) ? data.characters[playerId] : null;
     if (myCharacter) {
@@ -427,22 +559,32 @@ function listenToCombat() {
       characterToDisplay = data.characters[dmViewingPlayerId];
     }
     
-    if (characterToDisplay) {
+    // Panel lateral
+    if (characterToDisplay && !isDM) {
       renderCharacterPanel(characterToDisplay);
     } else {
       hideCharacterPanel();
     }
 
+    // Recordatorio de turno
     const turnHelper = document.getElementById('turnHelper');
     if (amICurrentPlayer && myCharacter && myCharacter.showHelper) { turnHelper.style.display = 'block'; } 
     else { turnHelper.style.display = 'none'; }
     
+    // 2. CONTROL DE VISIBILIDAD DE BOTONES
     document.getElementById('dmCombatControls').style.display = isDM ? 'block' : 'none';
     document.getElementById('startCombatBtn').style.display = isDM && !data.started ? 'inline-block' : 'none';
     document.getElementById('dmNextTurnBtn').style.display = isDM && data.started ? 'inline-block' : 'none';
     document.getElementById('playerEndTurnBtn').style.display = !isDM && data.started && amICurrentPlayer ? 'inline-block' : 'none';
     document.getElementById('endCombatBtn').style.display = isDM && data.started ? 'inline-block' : 'none';
+    
+    // Mostrar el botón de Abandonar Combate solo si NO es el DM
+    const btnAbandonar = document.getElementById('btnAbandonarCombate');
+    if(btnAbandonar) {
+        btnAbandonar.style.display = !isDM ? 'inline-block' : 'none';
+    }
 
+    // 3. RENDERIZADO DE LA LISTA DE INICIATIVA
     const list = document.getElementById("initiativeList");
     list.innerHTML = "";
     
@@ -460,18 +602,38 @@ function listenToCombat() {
           const charName = document.createElement("span"); charName.className = "character-name";
           
           const inspireCount = char.inspiration || 0;
-          const inspireIcon = inspireCount > 0 ? `⭐(${inspireCount})` : ''; // Icono de estrella
+          const inspireIcon = inspireCount > 0 ? `⭐(${inspireCount})` : ''; 
           charName.textContent = `${char.name} (${char.init}) ${inspireIcon}`;
           
-          if (isDM && !char.isEnemy) {
+          // --- VISTA COMPACTA DEL DM ---
+          if (isDM) {
             charName.classList.add('character-name-clickable');
-            charName.title = `Ver panel de ${char.name}`;
+            charName.title = `Ver estadísticas de ${char.name}`;
             charName.onclick = () => {
-              dmViewingPlayerId = char.id;
-              db.ref(`rooms/${roomId}/characters/${char.id}`).once('value', s => renderCharacterPanel(s.val()));
+              const existingStats = li.querySelector('.dm-compact-stats');
+              if (existingStats) {
+                  existingStats.remove(); 
+              } else {
+                  const stats = char.stats || {str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10};
+                  const f = (val) => { const m = calculateModifier(val); return (m >= 0 ? '+' : '') + m; };
+                  
+                  const statsBar = document.createElement('div');
+                  statsBar.className = 'dm-compact-stats';
+                  statsBar.innerHTML = `
+                      <div>FUE <span>${f(stats.str)}</span></div>
+                      <div>DES <span>${f(stats.dex)}</span></div>
+                      <div>CON <span>${f(stats.con)}</span></div>
+                      <div>INT <span>${f(stats.int)}</span></div>
+                      <div>SAB <span>${f(stats.wis)}</span></div>
+                      <div>CAR <span>${f(stats.cha)}</span></div>
+                      <button class="close-compact-btn" title="Cerrar" onclick="this.parentElement.remove(); event.stopPropagation();">[x]</button>
+                  `;
+                  li.appendChild(statsBar);
+              }
             };
           }
           
+          // Clic del jugador en su propio nombre
           if (char.id === playerId && !isDM) {
               charName.classList.add('character-name-clickable');
               charName.title = `Ver mi panel`;
@@ -483,6 +645,7 @@ function listenToCombat() {
           
           charInfo.appendChild(charName);
           
+          // Barra de Vida
           const canSeeHp = isDM || char.id === playerId;
           if (canSeeHp && char.maxHp) {
             const hpBarContainer = document.createElement("div");
@@ -498,6 +661,7 @@ function listenToCombat() {
           }
           container.appendChild(charInfo);
 
+          // Texto de Vida
           if (canSeeHp) {
             const hpDisplay = document.createElement("div");
             hpDisplay.className = "hp-text-container";
@@ -506,6 +670,7 @@ function listenToCombat() {
             container.appendChild(hpDisplay);
           }
 
+          // Iconos de acción del jugador
           if (char.id === playerId && myCharacter && myCharacter.showHelper) {
             const iconsContainer = document.createElement('div');
             iconsContainer.className = 'action-icons';
@@ -513,6 +678,7 @@ function listenToCombat() {
             container.appendChild(iconsContainer);
           }
 
+          // Botones del DM (Candado, Inspiración, Eliminar)
           if (isDM) {
             if (!char.isEnemy) {
               const lockBtn = document.createElement("button");
@@ -551,6 +717,7 @@ function listenToCombat() {
       }
     }
 
+    // 4. DISPLAY DEL TURNO ACTUAL
     const turnDisplay = document.getElementById("turnDisplay");
     const currentCharacter = (data.characters && data.currentCharacterId) ? data.characters[data.currentCharacterId] : null;
     if (data.started && currentCharacter) { turnDisplay.textContent = `🎯 Turno de: ${currentCharacter.name}`; }
@@ -599,23 +766,39 @@ function nextTurn() {
 
 function endCombat() {
   if (!isDM) return;
-  if (confirm("¿Finalizar el combate? Se reiniciará el orden de turno y se desbloqueará la edición de personajes.")) {
-    db.ref(`rooms/${roomId}/characters`).once('value', snapshot => {
-        const characters = snapshot.val();
-        if(characters) {
-            for (const charId in characters) {
-                if (characters[charId] && !characters[charId].isEnemy) {
-                    db.ref(`rooms/${roomId}/characters/${charId}/editLocked`).set(false);
-                }
-            }
-        }
+  if (confirm("¿Finalizar el combate? Esto cerrará la sala y regresará a todos al menú principal.")) {
+    // Eliminamos toda la sala de Firebase
+    db.ref(`rooms/${roomId}`).remove().then(() => {
+        disconnectAndMenu(); // El DM regresa al menú
     });
-    db.ref(`rooms/${roomId}`).update({ started: false, currentCharacterId: null });
+  }
+}
+function abandonarCombate() {
+  if (confirm("¿Seguro que quieres abandonar el combate? Tu personaje desaparecerá de la sala.")) {
+      if (roomId && playerId && !isDM) {
+          // Eliminamos específicamente a este personaje de la tabla del DM
+          db.ref(`rooms/${roomId}/characters/${playerId}`).remove().then(() => {
+              disconnectAndMenu();
+          });
+      } else {
+          disconnectAndMenu();
+      }
   }
 }
 
-// --- INICIALIZACIÓN ---
+// --- INICIALIZACIÓN FASE 3: Auto-Reconexión de Jugadores ---
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById("createOrJoin").style.display = "block";
-  checkForExistingSession();
+  checkForExistingSession(); // Revisa si era DM
+  
+  // Revisa si hay una sala de jugador guardada de antes
+  const lastRoom = localStorage.getItem('dnd_lastRoom');
+  if (lastRoom) {
+      const savedPlayerId = localStorage.getItem('dnd_room_' + lastRoom);
+      if (savedPlayerId) {
+          console.log("Intentando auto-reconexión a sala:", lastRoom);
+          document.getElementById("roomCodeInput").value = lastRoom;
+          joinRoom(); // Utiliza la lógica existente para validar que la sala sigue viva
+      }
+  }
 });
