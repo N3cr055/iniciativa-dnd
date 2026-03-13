@@ -117,8 +117,7 @@
       
 <div id="dmCombatControls" style="display: none; background-color: #2a231d; padding: 12px; border-radius: 4px; border: 1px dashed #5a4b3a; margin-bottom: 15px;">
         
-        <div style="display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: nowrap;">
-          
+        <div style="display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: nowrap; margin-bottom: 10px;">
           <div style="position: relative; flex: 2; min-width: 120px;">
             <input type="text" id="enemyName" placeholder="Monstruo (Inglés, ej: Wolf)" autocomplete="off" style="width: calc(100% - 22px); margin: 0; padding: 8px;" />
             <ul id="monsterSuggestions" style="display: none; position: absolute; top: 100%; left: 0; background: #1a1612; border: 1px solid #c9a45d; list-style: none; padding: 0; margin: 0; width: 100%; max-height: 150px; overflow-y: auto; z-index: 100; text-align: left; box-shadow: 0px 4px 6px rgba(0,0,0,0.5);"></ul>
@@ -139,8 +138,16 @@
           <div>
             <button class="dm-btn" onclick="addEnemy()" style="margin: 0; padding: 8px 12px; font-size: 0.9em; white-space: nowrap;">Añadir</button>
           </div>
-          
         </div>
+
+        <div style="text-align: left; border-top: 1px solid #4a3f35; padding-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center;">
+            <span style="font-size: 0.8em; color: #888;">Frecuentes:</span>
+            <button class="dm-tool-btn" onclick="quickAddMonster('Goblin', 7, 2)" style="background-color: #3a4b2a;">Goblin</button>
+            <button class="dm-tool-btn" onclick="quickAddMonster('Redbrand Ruffian', 16, 2)" style="background-color: #5a2b2b;">Ruffian</button>
+            <button class="dm-tool-btn" onclick="quickAddMonster('Lobo', 11, 2)" style="background-color: #3a3a4e;">Lobo</button>
+            <button class="dm-tool-btn" onclick="quickAddMonster('Orco', 15, 1)" style="background-color: #4a4b2a;">Orco</button>
+        </div>
+
       </div>
 
       
@@ -209,5 +216,10 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="app.js"></script>
   <h6>Creado por necros</h6>
+  <div style="text-align: center; margin-top: 30px; margin-bottom: 10px;">
+    <a href="AQUI_PONES_EL_LINK_DE_TU_GOOGLE_FORM" target="_blank" style="color: #c9a45d; text-decoration: underline; font-family: 'Lora', serif; font-size: 0.9em;">
+        🐞 Reportar un error o dar sugerencias
+    </a>
+</div>
 </body>
 </html>

@@ -301,7 +301,7 @@ function selectMonster(monster) {
     document.getElementById('monsterSuggestions').style.display = 'none';
 }
 
-// Función modificada para añadir al enemigo con las stats
+// Función modificada para añadir al enemigo con stats y TELEMETRÍA (Versión Estática Pareto)
 function addEnemy() {
   if (!isDM) return;
   const name = document.getElementById("enemyName").value.trim();
@@ -313,7 +313,7 @@ function addEnemy() {
       return;
   }
   
-  // ¡Aquí sumamos la tirada física del DM + la Destreza del monstruo!
+  // ¡Corregido! Volvemos a usar la variable global currentEnemyDexMod
   const finalInit = rawRoll + currentEnemyDexMod;
   const enemyId = 'ENEMY_' + generateId();
   
@@ -328,6 +328,28 @@ function addEnemy() {
       stats: currentEnemyStats || {str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10} 
   };
   
+  // 1. Guardar el enemigo en la sala de combate activa
+  db.ref(`rooms/${roomId}/characters/${enemyId}`).set(newEnemy).then(() => {
+    
+    // --- 2. TELEMETRÍA (ESTRATIFICACIÓN DE COMPORTAMIENTO) ---
+    const nombreEstandarizado = name.toUpperCase();
+    
+    db.ref(`analytics/monstruos_usados/${nombreEstandarizado}`).once('value', snapshot => {
+        let conteo = snapshot.val() || 0;
+        db.ref(`analytics/monstruos_usados/${nombreEstandarizado}`).set(conteo + 1);
+    });
+    // -----------------------------------------------------------------
+
+    // 3. Limpiamos todos los campos para el siguiente monstruo
+    document.getElementById("enemyName").value = "";
+    document.getElementById("enemyInit").value = "";
+    document.getElementById("enemyMaxHp").value = "";
+    document.getElementById("enemyDexDisplay").textContent = "+0";
+    currentEnemyStats = null;
+    currentEnemyDexMod = 0;
+  });
+}
+  
   db.ref(`rooms/${roomId}/characters/${enemyId}`).set(newEnemy).then(() => {
     // Limpiamos todo para el siguiente monstruo
     document.getElementById("enemyName").value = "";
@@ -337,7 +359,7 @@ function addEnemy() {
     currentEnemyStats = null;
     currentEnemyDexMod = 0;
   });
-}
+
 
 function removeCharacter(characterId) {
   if (!isDM) return;
@@ -802,3 +824,17 @@ window.addEventListener('DOMContentLoaded', () => {
       }
   }
 });
+// --- FUNCIÓN DE ACCESO RÁPIDO (Basada en Pareto) ---
+function quickAddMonster(name, hp, dexMod) {
+    document.getElementById('enemyName').value = name;
+    document.getElementById('enemyMaxHp').value = hp;
+    
+    // Le pasamos estadísticas promedio de esos monstruos
+    currentEnemyStats = {str: 10, dex: 10 + (dexMod * 2), con: 10, int: 10, wis: 10, cha: 10};
+    currentEnemyDexMod = dexMod;
+    
+    document.getElementById('enemyDexDisplay').textContent = (dexMod >= 0 ? '+' : '') + dexMod;
+    
+    // Enfocamos automáticamente la casilla del d20 para que el DM solo tire el dado y escriba
+    document.getElementById('enemyInit').focus();
+}
