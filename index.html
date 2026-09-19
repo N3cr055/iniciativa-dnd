@@ -40,13 +40,14 @@
   <div id="app">
     <h1>Turno Crítico</h1>
 
-    <div id="createOrJoin">
-      <button id="rejoinDmBtn" class="dm-btn" onclick="rejoinAsDM()" style="display: none; width: 80%; margin-bottom: 15px;">Reunirte como DM</button>
-      <button class="player-btn" onclick="createRoom()">Crear Sala (DM)</button>
-      <br>
-      <input type="text" id="roomCodeInput" placeholder="Código de sala" />
-      <button class="player-btn" onclick="joinRoom()">Unirse a Sala</button>
-    </div>
+<div id="createOrJoin">
+  <button id="rejoinDmBtn" class="dm-btn" onclick="rejoinAsDM()" style="width: 80%; margin-bottom: 15px;">Reunirte como DM</button>
+  <button class="player-btn" onclick="createRoom()">Crear Sala (DM)</button>
+  <br><br>
+  <!-- Solo dejamos el código de la sala -->
+  <input type="text" id="roomInput" placeholder="Código de sala" />
+  <button class="player-btn" onclick="joinRoom()">Unirse a Sala</button>
+</div>
 
     <div id="playerSetup" style="display:none;">
       <h3>Unirse al Combate</h3>

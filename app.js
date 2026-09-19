@@ -20,9 +20,29 @@ const db = firebase.database();
 let roomId = null; let playerId = null; let isDM = false; let combatListener = null;
 let modalTarget = { charId: null, currentHp: 0 };
 let dmViewingPlayerId = null;
-let isPlayerPanelOpen = true; 
+let isPlayerPanelOpen = false; 
 
 // --- FUNCIONES DE UTILIDAD ---
+
+// NUEVA FUNCIÓN: Ordena la iniciativa con reglas estrictas y de D&D 5e
+function sortCharacters(characters) {
+  characters.sort((a, b) => {
+    // 1er Filtro: El número de iniciativa más alto va primero
+    if (b.init !== a.init) {
+      return b.init - a.init;
+    }
+    
+    // 2do Filtro (D&D 5e): Si hay empate, los Jugadores van antes que los Enemigos
+    if (a.isEnemy !== b.isEnemy) {
+      return a.isEnemy ? 1 : -1; 
+    }
+    
+    // 3er Filtro (Fijador de Bug): Si dos del mismo bando empatan, usamos su ID único 
+    // para que su posición en la lista jamás cambie mágicamente.
+    return a.id.localeCompare(b.id);
+  });
+}
+
 function generateId() { return Math.random().toString(36).substr(2, 9); }
 function updateRoomCodeDisplay() { 
   const roomCodeDisplayElem = document.getElementById('roomCodeDisplay');
@@ -50,7 +70,7 @@ function disconnectAndMenu() {
   roomId = null; 
   isDM = false; 
   dmViewingPlayerId = null; 
-  isPlayerPanelOpen = true; 
+  isPlayerPanelOpen = false; 
   hideCharacterPanel();
   document.getElementById("combatView").style.display = "none"; 
   document.getElementById("playerSetup").style.display = "none"; 
@@ -100,15 +120,7 @@ function loadPlayerPreferences() {
 }
 
 function checkForExistingSession() {
-  const sessions = localStorage.getItem('dnd_dm_sessions');
-  const rejoinBtn = document.getElementById('rejoinDmBtn');
-  if (rejoinBtn) {
-    if (sessions && sessions !== '{}') {
-      rejoinBtn.style.display = 'block';
-    } else {
-      rejoinBtn.style.display = 'none';
-    }
-  }
+
 }
 
 // --- LÓGICA DE SALAS ---
@@ -123,41 +135,56 @@ function createRoom() {
 function rejoinAsDM() {
   const inputRoomId = prompt("Ingresa el código de la sala de DM:");
   if (!inputRoomId) return;
-  const sessions = JSON.parse(localStorage.getItem('dnd_dm_sessions')) || {};
-  const dmPlayerId = sessions[inputRoomId.toUpperCase()];
-  if (dmPlayerId) {
-    isDM = true; roomId = inputRoomId.toUpperCase(); playerId = dmPlayerId;
-    showCombatView();
-  } else {
-    alert("No se encontró una sesión de DM guardada para esa sala.");
-  }
+  
+  const roomUpper = inputRoomId.toUpperCase();
+
+  // Vamos a preguntarle a Firebase si la sala existe de verdad
+  db.ref(`rooms/${roomUpper}`).once("value", snapshot => {
+    if (snapshot.exists()) {
+      const sessions = JSON.parse(localStorage.getItem('dnd_dm_sessions')) || {};
+      let dmPlayerId = sessions[roomUpper];
+
+      // Si el navegador del Master borró la memoria, le creamos una ID nueva para que pase
+      if (!dmPlayerId) {
+        dmPlayerId = 'DM_' + generateId();
+        sessions[roomUpper] = dmPlayerId;
+        localStorage.setItem('dnd_dm_sessions', JSON.stringify(sessions));
+      }
+
+      // Le damos los permisos y lo dejamos pasar
+      cleanupListeners();
+      isDM = true; 
+      roomId = roomUpper; 
+      playerId = dmPlayerId;
+      showCombatView();
+    } else {
+      // Si la sala de verdad no existe en la base de datos
+      alert("Esa sala no existe o ya fue finalizada por completo.");
+    }
+  });
 }
 
 function joinRoom() {
-  const inputRoomId = document.getElementById("roomCodeInput").value.toUpperCase();
-  if (!inputRoomId) return;
-  db.ref(`rooms/${inputRoomId}`).once("value", snapshot => {
-    if (snapshot.exists()) {
-      cleanupListeners(); roomId = inputRoomId; isDM = false;
-      
-      // FASE 3: Cambiado de sessionStorage a localStorage
-      playerId = localStorage.getItem('dnd_room_' + roomId); 
-      localStorage.setItem('dnd_lastRoom', roomId); // Recordamos la última sala
-      
-      if (playerId && snapshot.val().characters && snapshot.val().characters[playerId]) {
-        showCombatView();
-      } else {
-        playerId = 'PLAYER_' + generateId();
-        localStorage.setItem('dnd_room_' + roomId, playerId); 
-        loadPlayerPreferences();
-        document.getElementById("createOrJoin").style.display = "none";
-        document.getElementById("playerSetup").style.display = "block";
-        updateRoomCodeDisplay();
-      }
-    } else {
-      alert("Sala no encontrada.");
-      localStorage.removeItem('dnd_lastRoom'); // Limpiar si la sala ya no existe
-    }
+  const roomInput = document.getElementById("roomInput").value.trim().toUpperCase();
+
+  if (!roomInput) { alert("Por favor, ingresa el código de la sala."); return; }
+
+  db.ref(`rooms/${roomInput}`).once("value", snapshot => {
+    if (!snapshot.exists()) { alert("Esa sala no existe o ya fue cerrada."); return; }
+
+    roomId = roomInput;
+    isDM = false;
+
+    // Carga los datos del jugador desde el dispositivo ANTES de mostrar la pantalla
+    loadPlayerPreferences();
+
+    // NUEVO: Oculta el panel de estadísticas y desmarca la casilla por defecto
+    document.getElementById("toggleStatsCheckbox").checked = false;
+    document.getElementById("optionalStatsContainer").classList.add("hidden");
+
+    document.getElementById("createOrJoin").style.display = "none";
+    document.getElementById("playerSetup").style.display = "block";
+    updateRoomCodeDisplay();
   });
 }
 
@@ -170,6 +197,7 @@ function showCombatView() {
 }
 
 // --- LÓGICA DE PERSONAJES ---
+// Reemplaza toda tu función submitCharacter actual por esta:
 function submitCharacter() {
   const name = document.getElementById("playerName").value.trim();
   const level = parseInt(document.getElementById("playerLevel").value) || 1;
@@ -188,9 +216,13 @@ function submitCharacter() {
     cha: parseInt(document.getElementById('playerCHA').value) || 10
   };
 
-  if (!name || isNaN(init) || isNaN(maxHp) || maxHp <= 0) { alert("Por favor, ingresa nombre, iniciativa y vida máxima válidos."); return; }
+  if (!name || isNaN(init) || isNaN(maxHp) || maxHp <= 0) { 
+    alert("Por favor, ingresa nombre, iniciativa y vida máxima válidos."); 
+    return; 
+  }
   if (isNaN(currentHp) || currentHp <= 0) { currentHp = maxHp; }
 
+  // 1. Guardamos las preferencias en el navegador
   savePlayerPreferences(name, level, pClass, maxHp, currentHp, showHelper, stats);
   
   const maxSlots = getSpellSlotsByLevel(level, pClass);
@@ -203,16 +235,40 @@ function submitCharacter() {
       spellSlots.pact = { current: maxSlots.pact.slots, max: maxSlots.pact.slots, level: maxSlots.pact.level };
   }
 
-  const newCharacter = {
-    id: playerId, name, level, pClass, init, maxHp, currentHp,
-    isEnemy: false, showHelper: showHelper,
-    inspiration: 0,
-    editLocked: false,
-    stats: stats,
-    spellSlots: spellSlots
-  };
-  
-  db.ref(`rooms/${roomId}/characters/${playerId}`).set(newCharacter).then(showCombatView);
+  // 2. LÓGICA DE RECONEXIÓN: Revisamos si el jugador ya existe en la base de datos
+  db.ref(`rooms/${roomId}/characters`).once("value", snapshot => {
+    const characters = snapshot.val() || {};
+    let existingPlayerId = null;
+
+    // Buscamos ignorando mayúsculas y minúsculas
+    for (const key in characters) {
+      if (characters[key].name.toLowerCase() === name.toLowerCase() && !characters[key].isEnemy) {
+        existingPlayerId = key;
+        break;
+      }
+    }
+
+    if (existingPlayerId) {
+      // RECONEXIÓN: El jugador ya estaba, usamos su ID viejo
+      playerId = existingPlayerId;
+    } else {
+      // JUGADOR NUEVO: Le creamos un ID nuevo
+      playerId = 'PLAYER_' + generateId();
+    }
+
+    const newCharacter = {
+      id: playerId, name, level, pClass, init, maxHp, currentHp,
+      isEnemy: false, showHelper: showHelper,
+      // Si reconecta, mantiene su inspiración y estatus de bloqueo
+      inspiration: existingPlayerId && characters[existingPlayerId] ? characters[existingPlayerId].inspiration : 0,
+      editLocked: existingPlayerId && characters[existingPlayerId] ? characters[existingPlayerId].editLocked : false,
+      stats: stats,
+      spellSlots: spellSlots
+    };
+    
+    // 3. Subimos los datos finales y entramos al combate
+    db.ref(`rooms/${roomId}/characters/${playerId}`).set(newCharacter).then(showCombatView);
+  });
 }
 
 // --- LÓGICA DE ENEMIGOS Y API (BESTIARIO) ---
@@ -615,7 +671,7 @@ function listenToCombat() {
       const characters = data.characters ? Object.values(data.characters) : [];
       if (characters.length === 0) { list.innerHTML = `<li>${isDM ? 'Añade personajes para empezar...' : 'Esperando personajes...'}</li>`; } 
       else {
-        characters.sort((a, b) => b.init - a.init);
+        sortCharacters(characters);
         characters.forEach(char => {
           const li = document.createElement("li");
           const container = document.createElement("div");
@@ -767,7 +823,7 @@ function startCombat() {
     if (!data) return;
     const characters = data.characters ? Object.values(data.characters) : [];
     if (characters.length > 0) {
-      characters.sort((a, b) => b.init - a.init);
+      sortCharacters(characters);
       db.ref(`rooms/${roomId}`).update({ started: true, currentCharacterId: characters[0].id });
     }
   });
@@ -779,7 +835,7 @@ function nextTurn() {
     if (!data || !data.started || (!isDM && data.currentCharacterId !== playerId)) return;
     const characters = data.characters ? Object.values(data.characters) : [];
     if (characters.length === 0) return;
-    characters.sort((a, b) => b.init - a.init);
+    sortCharacters(characters);
     const currentIndex = data.currentCharacterId ? characters.findIndex(c => c.id === data.currentCharacterId) : -1;
     const nextIndex = (currentIndex + 1) % characters.length;
     db.ref(`rooms/${roomId}`).update({ currentCharacterId: characters[nextIndex].id });
