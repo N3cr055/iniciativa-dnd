@@ -118,38 +118,51 @@
       
 <div id="dmCombatControls" style="display: none; background-color: #2a231d; padding: 12px; border-radius: 4px; border: 1px dashed #5a4b3a; margin-bottom: 15px;">
         
-        <div style="display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: nowrap; margin-bottom: 10px;">
-          <div style="position: relative; flex: 2; min-width: 120px;">
+    <!-- Fila 1: Controles Principales -->
+    <div style="display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: nowrap; margin-bottom: 10px;">
+        <div style="position: relative; flex: 2; min-width: 120px;">
             <input type="text" id="enemyName" placeholder="Monstruo (Inglés, ej: Wolf)" autocomplete="off" style="width: calc(100% - 22px); margin: 0; padding: 8px;" />
             <ul id="monsterSuggestions" style="display: none; position: absolute; top: 100%; left: 0; background: #1a1612; border: 1px solid #c9a45d; list-style: none; padding: 0; margin: 0; width: 100%; max-height: 150px; overflow-y: auto; z-index: 100; text-align: left; box-shadow: 0px 4px 6px rgba(0,0,0,0.5);"></ul>
-          </div>
-          
-          <div style="flex: 1; min-width: 60px;">
-            <input type="number" id="enemyInit" placeholder="d20" title="Tirada del dado" style="width: calc(100% - 22px); margin: 0; padding: 8px;" />
-          </div>
+        </div>
+        
+        <div style="flex: 1; min-width: 50px;">
+            <input type="number" id="enemyInit" placeholder="Inic" title="Tirada de Iniciativa (d20)" style="width: calc(100% - 22px); margin: 0; padding: 8px;" />
+        </div>
 
-          <div style="font-weight: bold; color: #c9a45d; font-size: 1.1em; width: 35px; text-align: center;" title="Modificador de Destreza">
+        <div style="font-weight: bold; color: #c9a45d; font-size: 1.1em; width: 35px; text-align: center;" title="Modificador de Destreza">
             <span id="enemyDexDisplay">+0</span>
-          </div>
-          
-          <div style="flex: 1; min-width: 60px;">
+        </div>
+        
+        <div style="flex: 1; min-width: 60px;">
             <input type="number" id="enemyMaxHp" placeholder="Vida" style="width: calc(100% - 22px); margin: 0; padding: 8px;" />
-          </div>
-          
-          <div>
+        </div>
+
+        <div style="flex: 1; min-width: 50px;">
+            <input type="text" id="enemyCR" placeholder="CR" title="Valor de Desafío (ej. 1/4, 2)" style="width: calc(100% - 22px); margin: 0; padding: 8px;" />
+        </div>
+
+        <div>
+            <!-- Único botón de Añadir funcional -->
             <button class="dm-btn" onclick="addEnemy()" style="margin: 0; padding: 8px 12px; font-size: 0.9em; white-space: nowrap;">Añadir</button>
-          </div>
         </div>
+    </div>
 
-        <div style="text-align: left; border-top: 1px solid #4a3f35; padding-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center;">
-            <span style="font-size: 0.8em; color: #888;">Frecuentes:</span>
-            <button class="dm-tool-btn" onclick="quickAddMonster('Goblin', 7, 2)" style="background-color: #3a4b2a;">Goblin</button>
-            <button class="dm-tool-btn" onclick="quickAddMonster('Zombie', 15, -2)" style="background-color: #5a2b2b;">Zombie</button>
-            <button class="dm-tool-btn" onclick="quickAddMonster('Barghest', 60, 2)" style="background-color: #3a3a4e;">Barghest</button>
-            <button class="dm-tool-btn" onclick="quickAddMonster('Flor cadaverica', 127, 2)" style="background-color: #4a4b2a;">Flor cadaverica</button>
+    <!-- Fila 2: Guardado en Bestiario Custom y Dificultad -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
+        <div>
+            <input type="checkbox" id="saveCustomMonster" />
+            <label for="saveCustomMonster" style="color: #c9a45d; font-size: 0.85em; cursor: pointer;">Guardar en mi Bestiario Custom</label>
         </div>
+        <div id="encounterDifficulty" style="font-size: 0.9em; color: #c9a45d; background: #1a1612; padding: 4px 10px; border-radius: 4px; border: 1px solid #5a4b3a;">
+            Dificultad: <span id="difficultyLevel">Añade jugadores y monstruos...</span>
+        </div>
+    </div>
 
-      </div>
+    <!-- Fila 3: Monstruos Frecuentes -->
+    <div id="frecuentesContainer" style="text-align: left; border-top: 1px solid #4a3f35; padding-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center;">
+        <!-- Los botones se generarán dinámicamente desde Firebase -->
+    </div>
+</div>
 
       
       <ul id="initiativeList"></ul>
@@ -216,6 +229,25 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="app.js"></script>
+  <div id="customMonsterModal" class="modal-overlay">
+  <div class="modal-content" style="max-width: 350px;">
+    <h4 id="customMonsterTitle">Estadísticas de Monstruo</h4>
+    <p style="font-size: 0.8em; color: #888; margin-top: -10px;">(Espacio reservado para futuros ataques/notas)</p>
+    <div class="stats-grid" style="margin: 15px 0;">
+      <div class="stat-box"> <label>FUE</label> <input type="number" id="customSTR" value="10"> </div>
+      <div class="stat-box"> <label>DES</label> <input type="number" id="customDEX" value="10"> </div>
+      <div class="stat-box"> <label>CON</label> <input type="number" id="customCON" value="10"> </div>
+      <div class="stat-box"> <label>INT</label> <input type="number" id="customINT" value="10"> </div>
+      <div class="stat-box"> <label>SAB</label> <input type="number" id="customWIS" value="10"> </div>
+      <div class="stat-box"> <label>CAR</label> <input type="number" id="customCHA" value="10"> </div>
+    </div>
+    <div class="modal-actions">
+      <button class="dm-btn" onclick="finalizeCustomMonster()">Guardar y Añadir</button>
+      <br>
+      <button style="margin-top: 10px; background-color: #444;" onclick="document.getElementById('customMonsterModal').style.display='none'">Cancelar</button>
+    </div>
+  </div>
+</div>
   <h6>Creado por necros</h6>
   <div style="text-align: center; margin-top: 30px; margin-bottom: 10px;">
     <a href="AQUI_PONES_EL_LINK_DE_TU_GOOGLE_FORM" target="_blank" style="color: #c9a45d; text-decoration: underline; font-family: 'Lora', serif; font-size: 0.9em;">

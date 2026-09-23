@@ -8,6 +8,15 @@ const firebaseConfig = {
   messagingSenderId: "639360670200",
   appId: "1:639360670200:web:0861ccb49cf9a522135e0"
 };
+let bestiarioCustom = [];
+
+function loadCustomBestiary() {
+    if (!isDM) return;
+    db.ref('bestiario_custom').on('value', snapshot => {
+        const data = snapshot.val();
+        bestiarioCustom = data ? Object.values(data) : [];
+    });
+}
 
 try {
   firebase.initializeApp(firebaseConfig);
@@ -25,6 +34,97 @@ let isPlayerPanelOpen = false;
 // --- FUNCIONES DE UTILIDAD ---
 
 // NUEVA FUNCIÓN: Ordena la iniciativa con reglas estrictas y de D&D 5e
+
+// --- CALCULADORA DE DIFICULTAD D&D 5E ---
+const xpByCR = {
+    "0": 10, "1/8": 25, "1/4": 50, "1/2": 100, "1": 200, "2": 450, "3": 700, "4": 1100, "5": 1800,
+    "6": 2300, "7": 2900, "8": 3900, "9": 5000, "10": 5900, "11": 7200, "12": 8400, "13": 10000,
+    "14": 11500, "15": 13000, "16": 15000, "17": 18000, "18": 20000, "19": 22000, "20": 25000,
+    "21": 33000, "22": 41000, "23": 50000, "24": 62000, "30": 155000
+};
+const thresholdsByLevel = {
+    1: [25, 50, 75, 100], 2: [50, 100, 150, 200], 3: [75, 150, 225, 400], 4: [125, 250, 375, 500],
+    5: [250, 500, 750, 1100], 6: [300, 600, 900, 1400], 7: [350, 750, 1100, 1700], 8: [450, 900, 1400, 2100],
+    9: [500, 1050, 1600, 2400], 10: [600, 1200, 1900, 2800], 11: [800, 1600, 2400, 3600], 12: [1000, 2000, 3000, 4500],
+    13: [1100, 2200, 3400, 5100], 14: [1250, 2500, 3800, 5700], 15: [1400, 2800, 4300, 6400], 16: [1600, 3200, 4800, 7200],
+    17: [2000, 3900, 5900, 8800], 18: [2100, 4200, 6300, 9500], 19: [2400, 4900, 7300, 10900], 20: [2800, 5700, 8500, 12700]
+};
+
+function updateDifficultyTracker(characters) {
+    if (!isDM) return;
+    const players = characters.filter(c => !c.isEnemy);
+    const enemies = characters.filter(c => c.isEnemy);
+    const diffSpan = document.getElementById('difficultyLevel');
+    
+    if (!diffSpan) return;
+    if (players.length === 0 || enemies.length === 0) {
+        diffSpan.innerHTML = "Añade jugadores y monstruos...";
+        return;
+    }
+
+    let partyThresholds = [0, 0, 0, 0];
+    players.forEach(p => {
+        const t = thresholdsByLevel[p.level || 1] || thresholdsByLevel[1];
+        partyThresholds[0] += t[0]; partyThresholds[1] += t[1];
+        partyThresholds[2] += t[2]; partyThresholds[3] += t[3];
+    });
+
+    let totalXP = 0;
+    enemies.forEach(e => { totalXP += (xpByCR[e.cr || "0"] || 0); });
+
+    let mCount = enemies.length;
+    let tier = 0;
+    if (mCount === 1) tier = 0;
+    else if (mCount === 2) tier = 1;
+    else if (mCount >= 3 && mCount <= 6) tier = 2;
+    else if (mCount >= 7 && mCount <= 10) tier = 3;
+    else if (mCount >= 11 && mCount <= 14) tier = 4;
+    else if (mCount >= 15) tier = 5;
+
+    // Regla de tamaño de grupo
+    if (players.length >= 6) tier = Math.max(0, tier - 1);
+    else if (players.length <= 2) tier = Math.min(5, tier + 1);
+
+    const multipliers = [1, 1.5, 2, 2.5, 3, 4, 5];
+    const adjustedXP = totalXP * multipliers[tier];
+
+    let text = "Fácil"; let color = "#3a8a06";
+    if (adjustedXP >= partyThresholds[3]) { text = "Mortal"; color = "#6b2b2b"; }
+    else if (adjustedXP >= partyThresholds[2]) { text = "Difícil"; color = "#c12727"; }
+    else if (adjustedXP >= partyThresholds[1]) { text = "Media"; color = "#c18b27"; }
+
+    diffSpan.innerHTML = `<span style="color: ${color}; font-weight: bold;">${text}</span> (XP Ajustada: ${adjustedXP})`;
+}
+
+
+function cargarMonstruosFrecuentes() {
+    if (!isDM) return;
+    
+    // Cambiamos .once por .on para actualización dinámica
+    db.ref('analytics/monstruos_usados').orderByChild('count').limitToLast(5).on('value', snapshot => {
+        const contenedor = document.getElementById('frecuentesContainer');
+        if (!contenedor) return;
+        
+        contenedor.innerHTML = '<span style="font-size: 0.8em; color: #888;">Frecuentes:</span>';
+        const monstruos = [];
+        snapshot.forEach(child => { monstruos.unshift({ nombre: child.key, data: child.val() }); });
+        
+        monstruos.forEach(m => {
+            const btn = document.createElement('button');
+            btn.className = 'dm-tool-btn';
+            btn.style.backgroundColor = '#4a3f35';
+            btn.textContent = m.nombre.charAt(0) + m.nombre.slice(1).toLowerCase();
+            
+            const hp = m.data.hp || 10;
+            const dex = m.data.dexMod || 0;
+            const cr = m.data.cr || "";
+            
+            btn.onclick = () => quickAddMonster(btn.textContent, hp, dex, cr);
+            contenedor.appendChild(btn);
+        });
+    });
+}
+
 function sortCharacters(characters) {
   characters.sort((a, b) => {
     // 1er Filtro: El número de iniciativa más alto va primero
@@ -193,6 +293,11 @@ function showCombatView() {
   document.getElementById("playerSetup").style.display = "none";
   document.getElementById("combatView").style.display = "block";
   updateRoomCodeDisplay();
+  
+  if (isDM) {
+      cargarMonstruosFrecuentes(); // Activa los botones de acceso rápido
+      loadCustomBestiary();        // Descarga tu bestiario de Firebase
+  }
   listenToCombat();
 }
 
@@ -282,60 +387,63 @@ document.getElementById('enemyName').addEventListener('input', (e) => {
     const query = e.target.value.trim().toLowerCase();
     const suggestionsBox = document.getElementById('monsterSuggestions');
     
-    // Si borran el texto, limpiamos los datos guardados
     if (query.length === 0) {
         currentEnemyStats = null;
         currentEnemyDexMod = 0;
         document.getElementById("enemyDexDisplay").textContent = "+0";
+        document.getElementById("enemyCR").value = "";
         suggestionsBox.style.display = 'none';
         return;
     }
 
-    // Esperar al menos 3 letras para no saturar la API
-    if (query.length < 3) {
-        suggestionsBox.style.display = 'none';
-        return;
-    }
-
-    // MOSTRAR INDICADOR DE CARGA
     suggestionsBox.innerHTML = '<li style="padding: 8px 12px; color: #888;">Buscando...</li>';
     suggestionsBox.style.display = 'block';
 
-    // ¡EL CAMBIO ESTÁ AQUÍ! Usamos name__icontains en lugar de search
     searchTimeout = setTimeout(() => {
+        const customMatches = bestiarioCustom.filter(m => m.name.toLowerCase().includes(query));
+        suggestionsBox.innerHTML = '';
+        let foundAny = false;
+
+        // 1. Mostrar los custom
+        customMatches.forEach(monster => {
+            foundAny = true;
+            const li = document.createElement('li');
+            li.style.cssText = 'padding: 8px 12px; cursor: pointer; color: #5db0c9; border-bottom: 1px solid #5a4b3a;';
+            li.textContent = `⭐ ${monster.name} (HP: ${monster.hit_points} | CR: ${monster.challenge_rating || '?'})`;
+            li.onmouseover = () => li.style.backgroundColor = '#2a231d';
+            li.onmouseout = () => li.style.backgroundColor = 'transparent';
+            li.onclick = () => selectMonster(monster);
+            suggestionsBox.appendChild(li);
+        });
+
+        if (query.length < 3) {
+            if (!foundAny) suggestionsBox.innerHTML = '<li style="padding: 8px 12px; color: #888;">Escribe más para buscar en el SRD...</li>';
+            return;
+        }
+
+        // 2. Continuar con la API y agregarlos a la misma lista
         fetch(`https://api.open5e.com/v1/monsters/?name__icontains=${query}&limit=5`)
-        .then(res => {
-            if (!res.ok) throw new Error("Error de conexión");
-            return res.json();
-        })
+        .then(res => res.json())
         .then(data => {
-            suggestionsBox.innerHTML = '';
             if(data.results && data.results.length > 0) {
                 data.results.forEach(monster => {
                     const li = document.createElement('li');
-                    li.style.padding = '8px 12px';
-                    li.style.cursor = 'pointer';
-                    li.style.borderBottom = '1px solid #5a4b3a';
-                    li.style.color = '#c9a45d';
-                    li.textContent = `${monster.name} (HP: ${monster.hit_points})`;
-                    
-                    // Efecto hover
+                    li.style.cssText = 'padding: 8px 12px; cursor: pointer; color: #c9a45d; border-bottom: 1px solid #5a4b3a;';
+                    li.textContent = `${monster.name} (HP: ${monster.hit_points} | CR: ${monster.challenge_rating})`;
                     li.onmouseover = () => li.style.backgroundColor = '#2a231d';
                     li.onmouseout = () => li.style.backgroundColor = 'transparent';
-                    
                     li.onclick = () => selectMonster(monster);
                     suggestionsBox.appendChild(li);
                 });
-            } else {
-                // Si la API no encuentra nada (ej: si buscó en español)
+            } else if (!foundAny) {
                 suggestionsBox.innerHTML = '<li style="padding: 8px 12px; color: #ff4c4c;">No encontrado (Intenta en Inglés)</li>';
             }
         }).catch(err => {
-            console.error("Error buscando monstruo:", err);
-            suggestionsBox.innerHTML = '<li style="padding: 8px 12px; color: #ff4c4c;">Error de conexión API</li>';
+            if (!foundAny) suggestionsBox.innerHTML = '<li style="padding: 8px 12px; color: #ff4c4c;">Error de conexión API</li>';
         });
     }, 400); 
 });
+
 // Cuando el DM hace clic en un monstruo de la lista
 function selectMonster(monster) {
     document.getElementById('enemyName').value = monster.name;
@@ -355,67 +463,110 @@ function selectMonster(monster) {
     dexDisplay.textContent = (currentEnemyDexMod >= 0 ? '+' : '') + currentEnemyDexMod;
     
     document.getElementById('monsterSuggestions').style.display = 'none';
+    document.getElementById('enemyCR').value = monster.challenge_rating || "?";
 }
 
 // Función modificada para añadir al enemigo con stats y TELEMETRÍA (Versión Estática Pareto)
+let pendingMonster = null; // Variable temporal para el modal
+
 function addEnemy() {
   if (!isDM) return;
   const name = document.getElementById("enemyName").value.trim();
   const rawRoll = parseInt(document.getElementById("enemyInit").value);
   const maxHp = parseInt(document.getElementById("enemyMaxHp").value);
+  const crInput = document.getElementById("enemyCR").value.trim() || "0";
   
   if (!name || isNaN(rawRoll) || isNaN(maxHp) || maxHp <= 0) {
       alert("Por favor, ponle nombre, su tirada en el d20 y su vida.");
       return;
   }
   
-  // ¡Corregido! Volvemos a usar la variable global currentEnemyDexMod
   const finalInit = rawRoll + currentEnemyDexMod;
-  const enemyId = 'ENEMY_' + generateId();
-  
-  const newEnemy = { 
-      id: enemyId, 
-      name: name, 
-      init: finalInit, 
-      maxHp: maxHp, 
-      currentHp: maxHp, 
-      isEnemy: true,
-      // Si el DM no usó la API, le ponemos stats en 10 por defecto
-      stats: currentEnemyStats || {str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10} 
-  };
-  
-  // 1. Guardar el enemigo en la sala de combate activa
-  db.ref(`rooms/${roomId}/characters/${enemyId}`).set(newEnemy).then(() => {
-    
-    // --- 2. TELEMETRÍA (ESTRATIFICACIÓN DE COMPORTAMIENTO) ---
-    const nombreEstandarizado = name.toUpperCase();
-    
-    db.ref(`analytics/monstruos_usados/${nombreEstandarizado}`).once('value', snapshot => {
-        let conteo = snapshot.val() || 0;
-        db.ref(`analytics/monstruos_usados/${nombreEstandarizado}`).set(conteo + 1);
-    });
-    // -----------------------------------------------------------------
+  const saveCheckbox = document.getElementById('saveCustomMonster');
 
-    // 3. Limpiamos todos los campos para el siguiente monstruo
-    document.getElementById("enemyName").value = "";
-    document.getElementById("enemyInit").value = "";
-    document.getElementById("enemyMaxHp").value = "";
-    document.getElementById("enemyDexDisplay").textContent = "+0";
-    currentEnemyStats = null;
-    currentEnemyDexMod = 0;
-  });
+  // Si decides guardar en tu bestiario, pausamos y abrimos el modal
+  if (saveCheckbox && saveCheckbox.checked) {
+      pendingMonster = { name, finalInit, maxHp, crInput };
+      document.getElementById('customMonsterTitle').textContent = `Stats de ${name}`;
+      
+      const baseStats = currentEnemyStats || {str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10};
+      document.getElementById('customSTR').value = baseStats.str;
+      document.getElementById('customDEX').value = baseStats.dex;
+      document.getElementById('customCON').value = baseStats.con;
+      document.getElementById('customINT').value = baseStats.int;
+      document.getElementById('customWIS').value = baseStats.wis;
+      document.getElementById('customCHA').value = baseStats.cha;
+
+      document.getElementById('customMonsterModal').style.display = 'flex';
+      return; 
+  }
+  
+  // Si no está marcada la casilla, lo añadimos directo al combate
+  const statsToSave = currentEnemyStats || {str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10};
+  executeMonsterAddition(name, finalInit, maxHp, crInput, statsToSave);
+}
+
+// Se ejecuta al darle clic a "Guardar y Añadir" en el modal
+function finalizeCustomMonster() {
+    if (!pendingMonster) return;
+
+    const customStats = {
+        str: parseInt(document.getElementById('customSTR').value) || 10,
+        dex: parseInt(document.getElementById('customDEX').value) || 10,
+        con: parseInt(document.getElementById('customCON').value) || 10,
+        int: parseInt(document.getElementById('customINT').value) || 10,
+        wis: parseInt(document.getElementById('customWIS').value) || 10,
+        cha: parseInt(document.getElementById('customCHA').value) || 10
+    };
+
+    const customEntry = {
+        name: pendingMonster.name,
+        hit_points: pendingMonster.maxHp,
+        challenge_rating: pendingMonster.crInput,
+        strength: customStats.str, dexterity: customStats.dex, constitution: customStats.con,
+        intelligence: customStats.int, wisdom: customStats.wis, charisma: customStats.cha
+    };
+    
+    db.ref(`bestiario_custom/${pendingMonster.name.toUpperCase()}`).set(customEntry);
+
+    executeMonsterAddition(pendingMonster.name, pendingMonster.finalInit, pendingMonster.maxHp, pendingMonster.crInput, customStats);
+    
+    document.getElementById('customMonsterModal').style.display = 'none';
+    pendingMonster = null;
+}
+
+// Función centralizada que hace la subida a Firebase
+function executeMonsterAddition(name, finalInit, maxHp, crInput, statsToSave) {
+    const enemyId = 'ENEMY_' + generateId();
+    const newEnemy = { 
+        id: enemyId, name: name, init: finalInit, maxHp: maxHp, currentHp: maxHp, isEnemy: true,
+        stats: statsToSave, cr: crInput
+    };
+
+    db.ref(`rooms/${roomId}/characters/${enemyId}`).set(newEnemy).then(() => {
+        const nombreEstandarizado = name.toUpperCase();
+        db.ref(`analytics/monstruos_usados/${nombreEstandarizado}`).once('value', snapshot => {
+            const data = snapshot.val() || { count: 0 };
+            db.ref(`analytics/monstruos_usados/${nombreEstandarizado}`).set({
+                count: data.count + 1, 
+                hp: maxHp, 
+                dexMod: calculateModifier(statsToSave.dex),
+                cr: crInput // <-- AÑADIMOS ESTA LÍNEA PARA GUARDAR EL CR
+            });
+        });
+
+        document.getElementById("enemyName").value = "";
+        document.getElementById("enemyInit").value = "";
+        document.getElementById("enemyMaxHp").value = "";
+        document.getElementById("enemyCR").value = "";
+        document.getElementById("enemyDexDisplay").textContent = "+0";
+        const saveCheckbox = document.getElementById('saveCustomMonster');
+        if (saveCheckbox) saveCheckbox.checked = false;
+        currentEnemyStats = null;
+        currentEnemyDexMod = 0;
+    });
 }
   
-  db.ref(`rooms/${roomId}/characters/${enemyId}`).set(newEnemy).then(() => {
-    // Limpiamos todo para el siguiente monstruo
-    document.getElementById("enemyName").value = "";
-    document.getElementById("enemyInit").value = "";
-    document.getElementById("enemyMaxHp").value = "";
-    document.getElementById("enemyDexDisplay").textContent = "+0";
-    currentEnemyStats = null;
-    currentEnemyDexMod = 0;
-  });
-
 
 function removeCharacter(characterId) {
   if (!isDM) return;
@@ -672,6 +823,7 @@ function listenToCombat() {
       if (characters.length === 0) { list.innerHTML = `<li>${isDM ? 'Añade personajes para empezar...' : 'Esperando personajes...'}</li>`; } 
       else {
         sortCharacters(characters);
+        updateDifficultyTracker(characters);
         characters.forEach(char => {
           const li = document.createElement("li");
           const container = document.createElement("div");
@@ -881,9 +1033,10 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 // --- FUNCIÓN DE ACCESO RÁPIDO (Basada en Pareto) ---
-function quickAddMonster(name, hp, dexMod) {
+function quickAddMonster(name, hp, dexMod, cr = "") {
     document.getElementById('enemyName').value = name;
     document.getElementById('enemyMaxHp').value = hp;
+    document.getElementById('enemyCR').value = cr; // <-- METEMOS EL CR EN SU CASILLA
     
     // Le pasamos estadísticas promedio de esos monstruos
     currentEnemyStats = {str: 10, dex: 10 + (dexMod * 2), con: 10, int: 10, wis: 10, cha: 10};
@@ -891,6 +1044,6 @@ function quickAddMonster(name, hp, dexMod) {
     
     document.getElementById('enemyDexDisplay').textContent = (dexMod >= 0 ? '+' : '') + dexMod;
     
-    // Enfocamos automáticamente la casilla del d20 para que el DM solo tire el dado y escriba
+    // Enfocamos automáticamente la casilla del d20
     document.getElementById('enemyInit').focus();
 }
