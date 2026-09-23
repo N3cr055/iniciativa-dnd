@@ -151,10 +151,10 @@
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
         <div>
             <input type="checkbox" id="saveCustomMonster" />
-            <label for="saveCustomMonster" style="color: #c9a45d; font-size: 0.85em; cursor: pointer;">Guardar en mi Bestiario Custom</label>
+            <label for="saveCustomMonster" style="color: #c9a45d; font-size: 0.85em; cursor: pointer;">Guardar Bestiario </label>
         </div>
         <div id="encounterDifficulty" style="font-size: 0.9em; color: #c9a45d; background: #1a1612; padding: 4px 10px; border-radius: 4px; border: 1px solid #5a4b3a;">
-            Dificultad: <span id="difficultyLevel">Añade jugadores y monstruos...</span>
+            Dificultad: <span id="difficultyLevel">Esperando...</span>
         </div>
     </div>
 
@@ -253,6 +253,13 @@
     <a href="AQUI_PONES_EL_LINK_DE_TU_GOOGLE_FORM" target="_blank" style="color: #c9a45d; text-decoration: underline; font-family: 'Lora', serif; font-size: 0.9em;">
         🐞 Reportar un error o dar sugerencias
     </a>
+</div>
+<!-- Div flotante temporal para XP / LVL UP -->
+<div id="rewardsModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.85); display: none; justify-content: center; align-items: center; z-index: 2000; animation: fadeIn 0.5s;">
+  <div style="text-align: center; border: 2px solid #c9a45d; background: #1a1612; padding: 30px 50px; border-radius: 10px; box-shadow: 0 0 30px #c9a45d;">
+    <h2 id="rewardTitle" style="font-family: 'Uncial Antiqua', cursive; color: #c9a45d; font-size: 2.5em; margin: 0 0 10px 0; text-shadow: 0 0 10px rgba(201, 164, 93, 0.6);">¡VICTORIA!</h2>
+    <p id="rewardText" style="color: #dcdcdc; font-size: 1.5em; font-family: 'Lora', serif; margin: 0; text-shadow: 0 0 5px rgba(255,255,255,0.3);"></p>
+  </div>
 </div>
 </body>
 </html>

@@ -58,7 +58,7 @@ function updateDifficultyTracker(characters) {
     
     if (!diffSpan) return;
     if (players.length === 0 || enemies.length === 0) {
-        diffSpan.innerHTML = "Añade jugadores y monstruos...";
+        diffSpan.innerHTML = "Esperando...";
         return;
     }
 
@@ -93,7 +93,7 @@ function updateDifficultyTracker(characters) {
     else if (adjustedXP >= partyThresholds[2]) { text = "Difícil"; color = "#c12727"; }
     else if (adjustedXP >= partyThresholds[1]) { text = "Media"; color = "#c18b27"; }
 
-    diffSpan.innerHTML = `<span style="color: ${color}; font-weight: bold;">${text}</span> (XP Ajustada: ${adjustedXP})`;
+    diffSpan.innerHTML = `<span style="color: ${color}; font-weight: bold;">${text}</span> (XP: ${adjustedXP})`;
 }
 
 
@@ -767,6 +767,21 @@ function listenToCombat() {
   
   combatListener = db.ref(`rooms/${roomId}`).on("value", snapshot => {
     const data = snapshot.val();
+    // Detector de Recompensas al terminar combate
+    if (data && data.reward) {
+        const rewardModal = document.getElementById('rewardsModal');
+        const rewardText = document.getElementById('rewardText');
+        
+        if (data.reward.levelUp) {
+            rewardText.innerHTML = "¡SUBIDA DE NIVEL!<br><span style='font-size: 0.7em; color: #c9a45d;'>Prepárate para nuevas hazañas</span>";
+        } else {
+            rewardText.innerHTML = `¡Has ganado <span style="color: #c9a45d; font-weight: bold;">+${data.reward.xp} XP</span>!`;
+        }
+        
+        rewardModal.style.display = 'flex';
+        // Se ocultará solo tras 3 segundos
+        setTimeout(() => { rewardModal.style.display = 'none'; }, 3000);
+    }
     
     // 1. SI LA SALA YA NO EXISTE (El DM usó "Finalizar Combate")
     if (!data) { 
@@ -996,13 +1011,57 @@ function nextTurn() {
 
 function endCombat() {
   if (!isDM) return;
-  if (confirm("¿Finalizar el combate? Esto cerrará la sala y regresará a todos al menú principal.")) {
-    // Eliminamos toda la sala de Firebase
-    db.ref(`rooms/${roomId}`).remove().then(() => {
-        disconnectAndMenu(); // El DM regresa al menú
+  
+  // 1. Calculamos la XP total de los monstruos que estaban en el combate
+  db.ref(`rooms/${roomId}/characters`).once('value', snapshot => {
+    const data = snapshot.val() || {};
+    let totalMonstersXP = 0;
+    let monsterCount = 0;
+
+    Object.values(data).forEach(char => {
+      if (char.isEnemy) {
+        monsterCount++;
+        totalMonstersXP += (xpByCR[char.cr || "0"] || 0);
+      }
     });
-  }
+
+    if (monsterCount === 0) {
+      if (confirm("¿Finalizar el combate? (No había monstruos para calcular XP).")) {
+        executeEndCombatSequence(0, false);
+      }
+      return;
+    }
+
+    // 2. Preguntamos al DM
+    const darXp = confirm(`Los monstruos derrotados otorgan un total de ${totalMonstersXP} XP.\n\n¿Deseas repartir esta experiencia automáticamente a los jugadores?\n(Presiona Cancelar si prefieres dar Subida de Nivel / LVL UP)`);
+
+    if (darXp) {
+      executeEndCombatSequence(totalMonstersXP, false);
+    } else {
+      const subirNivel = confirm("¿Quieres enviar una alerta general de ¡LVL UP! a todos los jugadores?");
+      if (subirNivel) {
+        executeEndCombatSequence(0, true);
+      }
+    }
+  });
 }
+
+function executeEndCombatSequence(xpAmount, isLevelUp) {
+  // Escribimos la recompensa en la base de datos de la sala antes de borrarla
+  db.ref(`rooms/${roomId}/reward`).set({
+    xp: xpAmount,
+    levelUp: isLevelUp,
+    timestamp: Date.now()
+  }).then(() => {
+    // Damos un margen de 3.5 segundos para que los jugadores alcancen a ver el aviso antes de cerrar la sala
+    setTimeout(() => {
+      db.ref(`rooms/${roomId}`).remove().then(() => {
+        disconnectAndMenu();
+      });
+    }, 3500);
+  });
+}
+
 function abandonarCombate() {
   if (confirm("¿Seguro que quieres abandonar el combate? Tu personaje desaparecerá de la sala.")) {
       if (roomId && playerId && !isDM) {
