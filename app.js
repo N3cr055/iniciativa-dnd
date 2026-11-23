@@ -1386,7 +1386,7 @@ function processScannedQr(rawText) {
     if (confirm(`El DM te cobra ${resumenCobro}\nConcepto: "${payload.concept}"\n\n¿Autorizar pago?`)) {
       executeDmChargeWithConversion(bankUser.id, bankUser.nombre, payload, payload.concept, fechaActual);
     }
-  }S
+  }
   // CASO 3: Botín o Recompensa entregada por el DM
 else if (payload.type === "dm_grant") {
     if (bankUser.isDM) return;
