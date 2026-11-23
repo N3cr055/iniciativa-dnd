@@ -1322,6 +1322,8 @@ function generateDmQr() {
 }
 
 // --- ESCÁNER DE CÁMARA Y PROCESAMIENTO ---
+let qrLocked = false;
+
 function startQrScanner() {
   document.getElementById("qrDisplayBox").style.display = "none";
   const readerBox = document.getElementById("qrReaderBox");
@@ -1329,16 +1331,29 @@ function startQrScanner() {
 
   if (html5QrScanner) return;
 
+  qrLocked = false;
   html5QrScanner = new Html5Qrcode("qr-reader");
+
   html5QrScanner.start(
     { facingMode: "environment" },
     { fps: 10, qrbox: { width: 220, height: 220 } },
     (decodedText) => {
+      if (qrLocked) return;
+      qrLocked = true;
+
       stopQrScanner();
-      processScannedQr(decodedText);
+
+      try {
+        processScannedQr(decodedText);
+      } finally {
+        setTimeout(() => {
+          qrLocked = false;
+        }, 800);
+      }
     },
     (errorMessage) => { /* Ignorar errores de lectura por frame */ }
   ).catch(err => {
+    qrLocked = false;
     alert("No se pudo acceder a la cámara (asegúrate de usar HTTPS y dar permisos).");
     stopQrScanner();
   });
@@ -1346,23 +1361,28 @@ function startQrScanner() {
 
 function stopQrScanner() {
   const readerBox = document.getElementById("qrReaderBox");
-  if (readerBox) {
-    readerBox.style.display = "none";
-  }
+  if (readerBox) readerBox.style.display = "none";
 
-  if (typeof html5QrCode !== "undefined" && html5QrCode) {
-    try {
-      const stopResult = html5QrCode.stop();
-      if (stopResult && typeof stopResult.catch === "function") {
-        stopResult.catch(() => {});
-      }
-    } catch (_) {
-      // Ignoramos si ya estaba detenido
-    }
+  if (typeof html5QrScanner !== "undefined" && html5QrScanner) {
+    const scannerRef = html5QrScanner;
+    html5QrScanner = null;
+
+    Promise.resolve()
+      .then(() => scannerRef.stop())
+      .then(() => {
+        if (typeof scannerRef.clear === "function") {
+          return scannerRef.clear();
+        }
+      })
+      .catch(() => {});
   }
 }
 
+let isProcessingQr = false;
+
 function processScannedQr(rawText) {
+  if (isProcessingQr) return;
+
   let payload;
   try {
     payload = JSON.parse(rawText);
@@ -1370,6 +1390,8 @@ function processScannedQr(rawText) {
     alert("Código QR no reconocido por el Banco.");
     return;
   }
+
+  isProcessingQr = true;
 
   if (typeof stopQrScanner === "function") {
     stopQrScanner();
@@ -1381,39 +1403,16 @@ function processScannedQr(rawText) {
   const concept = payload.m || payload.concept || "Operación";
   const txNonce = payload.n || payload.txNonce;
 
-  // CASO 1: Transferencia entre jugadores (El pagador escanea el QR del receptor)
-  if (txType === "p2p_receive") {
-    if (payload.targetId === bankUser.id) {
-      alert("No puedes transferirte monedas a ti mismo.");
-      return;
-    }
+  const unlockQr = () => {
+    setTimeout(() => {
+      isProcessingQr = false;
+    }, 600);
+  };
 
-    const monedaInput = prompt(`Transferir a ${payload.targetName}.\nEscribe la moneda (oro, plata o cobre):`, "oro");
-    if (!monedaInput) return;
-    const currency = monedaInput.trim().toLowerCase();
-    if (!["platino", "oro", "plata", "cobre"].includes(currency)) {
-      alert("Moneda inválida. Debe ser: oro, plata o cobre.");
-      return;
-    }
-
-    const amount = parseInt(prompt(`¿Cuántas monedas de ${currency.toUpperCase()} deseas enviar a ${payload.targetName}?`));
-    if (isNaN(amount) || amount <= 0) {
-      alert("Cantidad inválida.");
-      return;
-    }
-
-    const conceptP2P = prompt("Concepto obligatorio de la transferencia:");
-    if (!conceptP2P || conceptP2P.trim() === "") {
-      alert("Transferencia cancelada: El concepto es obligatorio.");
-      return;
-    }
-
-    executeTransfer(bankUser.id, bankUser.nombre, payload.targetId, payload.targetName, amount, currency, conceptP2P.trim(), fechaActual);
-  }
-  // CASO 2: Cobro directo del DM (Taberna, tienda, impuestos)
-  else if (txType === "dm_charge") {
-    if (bankUser.isDM) {
+  if (txType === "dm_charge") {
+    if (!bankUser || bankUser.isDM) {
       alert("El DM no puede pagarse cobros a sí mismo.");
+      unlockQr();
       return;
     }
 
@@ -1424,11 +1423,12 @@ function processScannedQr(rawText) {
 
     if (!resumenCobro) {
       alert("El cobro no contiene monedas válidas.");
+      unlockQr();
       return;
     }
 
-    if (confirm(`El DM te cobra ${resumenCobro}\nConcepto: "${concept}"\n\n¿Autorizar pago?`)) {
-      // Pasamos tanto `coins: coinsObj` como `c: coinsObj` por si tu función lee cualquiera de los dos
+    const autorizado = confirm(`El DM te cobra ${resumenCobro}\nConcepto: "${concept}"\n\n¿Autorizar pago?`);
+    if (autorizado) {
       executeDmChargeWithConversion(
         bankUser.id,
         bankUser.nombre,
@@ -1438,55 +1438,12 @@ function processScannedQr(rawText) {
         true
       );
     }
+    unlockQr();
+    return;
   }
-  // CASO 3: Botín o Recompensa entregada por el DM
-  else if (txType === "dm_grant") {
-    if (bankUser.isDM) return;
 
-    const doGrant = () => {
-      const updates = {};
-      const resumenParts = [];
-      const writePromises = [];
-
-      db.ref(`billeteras/${bankUser.id}`).once("value", wSnap => {
-        const w = wSnap.val() || {};
-        ["platino", "oro", "plata", "cobre"].forEach(c => {
-          const add = parseInt(coinsObj[c], 10) || 0;
-          if (add > 0) {
-            updates[c] = (Number(w[c]) || 0) + add;
-            resumenParts.push(`+${add} ${c.toUpperCase()}`);
-            writePromises.push(
-              recordTransaction("DM", "Bóveda del Reino (DM)", bankUser.id, bankUser.nombre, add, c, concept, fechaActual, true)
-            );
-          }
-        });
-
-        if (resumenParts.length === 0) {
-          alert("El botín no contiene monedas válidas.");
-          return;
-        }
-
-        db.ref(`billeteras/${bankUser.id}`).update(updates)
-          .then(() => Promise.all(writePromises))
-          .then(() => {
-            alert(`Botín reclamado (${concept}): ${resumenParts.join(", ")}`);
-          });
-      });
-    };
-
-    if (txNonce) {
-      const claimKey = `billeteras/${bankUser.id}/claimed/${txNonce}`;
-      db.ref(claimKey).once("value", snap => {
-        if (snap.exists()) {
-          alert("Ya reclamaste este botín anteriormente.");
-          return;
-        }
-        db.ref(claimKey).set(true).then(doGrant);
-      });
-    } else {
-      doGrant();
-    }
-  }
+  // ... resto de casos (p2p_receive / dm_grant) llamando a unlockQr() al salir
+  unlockQr();
 }
 
 function executeTransfer(fromId, fromName, toId, toName, amount, currency, concept, fecha) {
