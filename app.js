@@ -1278,9 +1278,11 @@ function showMyReceiveQr() {
 
 function generateDmQr() {
   if (!bankUser || !bankUser.isDM) return;
-  const type = document.getElementById("dmTxType").value; // 'charge' o 'grant'
-  const conceptInput = document.getElementById("dmConcept").value.trim() || "Botin";
-  // Quitamos acentos/caracteres raros por si la librería codifica en modo byte largo
+
+  const typeEl = document.getElementById("dmTxType");
+  const conceptEl = document.getElementById("dmConcept");
+  const type = typeEl ? typeEl.value : "grant";
+  const conceptInput = (conceptEl && conceptEl.value ? conceptEl.value : "Botin").trim();
   const concept = conceptInput.normalize("NFD").replace(/[\u0300-\u036f]/g, "").slice(0, 25);
 
   const coins = {};
@@ -1290,7 +1292,8 @@ function generateDmQr() {
     ["plata", "dmAmtPlata"],
     ["cobre", "dmAmtCobre"]
   ].forEach(([key, id]) => {
-    const val = parseInt(document.getElementById(id).value, 10) || 0;
+    const input = document.getElementById(id);
+    const val = input ? (parseInt(input.value, 10) || 0) : 0;
     if (val > 0) coins[key] = val;
   });
 
@@ -1299,7 +1302,7 @@ function generateDmQr() {
     return;
   }
 
-  const shortNonce = Math.random().toString(36).substring(2, 8);
+  const shortNonce = `${Date.now().toString(36).slice(-3)}${Math.random().toString(36).substring(2, 6)}`;
   const payload = {
     t: type === "charge" ? "dm_charge" : "dm_grant",
     c: coins,
@@ -1547,16 +1550,10 @@ function executeDmChargeWithConversion(playerId, playerName, payload, concept, f
       partialNote = " [Pago parcial / consideración]";
     }
 
-    const prefRaw = prompt(
-      `Tus monedas: ${balances.platino} PP, ${balances.oro} PO, ${balances.plata} PL, ${balances.cobre} PC.\n` +
-      `¿Con qué moneda prefieres empezar a pagar? (platino, oro, plata, cobre)`,
-      "oro"
-    );
-    const prefCoin = (prefRaw || "oro").trim().toLowerCase();
-    const baseOrder = ["platino", "oro", "plata", "cobre"];
-    const order = baseOrder.includes(prefCoin)
-      ? [prefCoin, ...baseOrder.filter(c => c !== prefCoin)]
-      : baseOrder;
+    // Orden automático: primero las monedas solicitadas y luego de mayor a menor valor
+    const requestedFirst = ["platino", "oro", "plata", "cobre"].filter(c => (parseInt(coins[c], 10) || 0) > 0);
+    const remainingOrder = ["platino", "oro", "plata", "cobre"].filter(c => !requestedFirst.includes(c));
+    const order = [...requestedFirst, ...remainingOrder];
 
     let remainingToCover = chargeCopper;
     const deducted = { platino: 0, oro: 0, plata: 0, cobre: 0 };
@@ -1571,16 +1568,34 @@ function executeDmChargeWithConversion(playerId, playerName, payload, concept, f
       }
     }
 
-    if (remainingToCover > 0 && balances.cobre >= remainingToCover) {
-      deducted.cobre += remainingToCover;
-      balances.cobre -= remainingToCover;
-      remainingToCover = 0;
+    // Si aún queda cobre suelto por cubrir, tomamos 1 moneda superior disponible y damos cambio en denominaciones menores
+    if (remainingToCover > 0) {
+      const tiers = ["cobre", "plata", "oro", "platino"];
+      for (let i = 1; i < tiers.length && remainingToCover > 0; i++) {
+        const higherCoin = tiers[i];
+        if (balances[higherCoin] > 0) {
+          balances[higherCoin] -= 1;
+          let changeCopper = COIN_TO_COPPER[higherCoin] - remainingToCover;
+          deducted[higherCoin] += 1;
+          remainingToCover = 0;
+
+          // Devolvemos el cambio sobrante en monedas menores a la bóveda
+          const lowerTiers = ["platino", "oro", "plata", "cobre"];
+          for (const lower of lowerTiers) {
+            if (COIN_TO_COPPER[lower] < COIN_TO_COPPER[higherCoin] && changeCopper > 0) {
+              const giveBack = Math.floor(changeCopper / COIN_TO_COPPER[lower]);
+              balances[lower] += giveBack;
+              changeCopper -= giveBack * COIN_TO_COPPER[lower];
+            }
+          }
+        }
+      }
     }
 
     const paidParts = [];
     const writePromises = [];
 
-    baseOrder.forEach(coin => {
+    ["platino", "oro", "plata", "cobre"].forEach(coin => {
       if (deducted[coin] > 0) {
         paidParts.push(`${deducted[coin]} ${coin.toUpperCase()}`);
         writePromises.push(
