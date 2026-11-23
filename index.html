@@ -261,21 +261,25 @@
         <option value="charge">Cobrar al Jugador (Quitar monedas al escanear)</option>
         <option value="grant">Entregar Recompensa / Botín (Dar monedas al escanear)</option>
       </select>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; text-align: left;">
-        <label style="font-size: 0.8em; color: #e5e4e2;">💎 Platino (PP)
-          <input type="number" id="dmAmtPlatino" min="0" placeholder="0" style="width: 100%;" />
-        </label>
-        <label style="font-size: 0.8em; color: #ffd700;">🟡 Oro (PO)
-          <input type="number" id="dmAmtOro" min="0" placeholder="0" style="width: 100%;" />
-        </label>
-        <label style="font-size: 0.8em; color: #c0c0c0;">⚪ Plata (PL)
-          <input type="number" id="dmAmtPlata" min="0" placeholder="0" style="width: 100%;" />
-        </label>
-        <label style="font-size: 0.8em; color: #cd7f32;">🟤 Cobre (PC)
-          <input type="number" id="dmAmtCobre" min="0" placeholder="0" style="width: 100%;" />
-        </label>
-      </div>
-      </div>
+<div style="display: flex; flex-direction: column; gap: 6px; max-width: 250px; margin: 0 auto 10px auto;">
+  <label style="display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.9em; color: #e5e4e2;">
+    <span>💎 PP</span>
+    <input type="number" id="dmAmtPlatino" min="0" placeholder="0" style="width: 110px;" />
+  </label>
+  <label style="display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.9em; color: #ffd700;">
+    <span>🟡 PO</span>
+    <input type="number" id="dmAmtOro" min="0" placeholder="0" style="width: 110px;" />
+  </label>
+  <label style="display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.9em; color: #c0c0c0;">
+    <span>⚪ PL</span>
+    <input type="number" id="dmAmtPlata" min="0" placeholder="0" style="width: 110px;" />
+  </label>
+  <label style="display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.9em; color: #cd7f32;">
+    <span>🟤 PC</span>
+    <input type="number" id="dmAmtCobre" min="0" placeholder="0" style="width: 110px;" />
+  </label>
+</div>
+      
       <input type="text" id="dmConcept" placeholder="Concepto (ej. Posada, Botín)" style="width: 90%; margin-bottom: 8px;" />
       <button class="dm-btn" onclick="generateDmQr()">Generar QR de Operación</button>
     </div>
@@ -287,10 +291,10 @@
     </div>
 
     <!-- Contenedor donde aparece el QR generado -->
-    <div id="qrDisplayBox" style="display:none; background: white; padding: 15px; border-radius: 8px; width: fit-content; margin: 15px auto; text-align: center;">
-      <div id="qrcodeCanvas"></div>
-      <p id="qrCaption" style="color: #1a1612; font-weight: bold; margin: 10px 0 0 0; font-size: 0.9em;"></p>
-    </div>
+<div id="qrDisplayBox" style="display:none; background: white; padding: 15px; border-radius: 8px; width: fit-content; max-width: 280px; margin: 15px auto; text-align: center;">
+  <div id="qrcodeCanvas" style="display: flex; justify-content: center;"></div>
+  <p id="qrCaption" style="color: #1a1612; font-weight: bold; max-width: 240px; margin: 10px auto 0 auto; font-size: 0.85em; text-align: center;"></p>
+</div>
 
     <!-- Contenedor de la Cámara para Escanear -->
     <div id="qrReaderBox" style="display:none; max-width: 300px; margin: 15px auto;">

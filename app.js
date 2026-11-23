@@ -1230,23 +1230,33 @@ historyListener = db.ref('transacciones').limitToLast(25).on("value", snap => {
 
 
 // --- GENERACIÓN DE CÓDIGOS QR ---
-function renderQrCode(payloadObj, captionText) {
-  stopQrScanner();
-  const displayBox = document.getElementById("qrDisplayBox");
-  const canvas = document.getElementById("qrcodeCanvas");
-  canvas.innerHTML = "";
-  
-  new QRCode(canvas, {
-    text: JSON.stringify(payloadObj),
+function renderQrCode(payload, captionText) {
+  const qrContainer = document.getElementById("qrcodeCanvas");
+  if (!qrContainer) return;
+
+  // Muy importante: limpiar el QR anterior antes de crear el nuevo
+  qrContainer.innerHTML = "";
+
+  const jsonStr = JSON.stringify(payload);
+  if (jsonStr.length > 220) {
+    alert("El texto del concepto o datos es demasiado largo para un QR. Acorta el concepto.");
+    return;
+  }
+
+  new QRCode(qrContainer, {
+    text: jsonStr,
     width: 180,
     height: 180,
-    colorDark: "#1a1612",
-    colorLight: "#ffffff",
-    correctLevel: QRCode.CorrectLevel.M
+    correctLevel: QRCode.CorrectLevel.M // 'M' aguanta más datos que 'H' o 'Q'
   });
 
-  document.getElementById("qrCaption").textContent = captionText;
-  displayBox.style.display = "block";
+  const captionEl = document.getElementById("qrCaption");
+  if (captionEl) {
+    captionEl.textContent = captionText || "";
+    captionEl.style.display = captionText ? "block" : "none";
+  }
+
+  document.getElementById("qrDisplayBox").style.display = "block";
 }
 
 function showMyReceiveQr() {
@@ -1262,30 +1272,38 @@ function showMyReceiveQr() {
 function generateDmQr() {
   if (!bankUser || !bankUser.isDM) return;
   const type = document.getElementById("dmTxType").value; // 'charge' o 'grant'
-  const concept = document.getElementById("dmConcept").value.trim() || "Operación del Reino";
+  const conceptInput = document.getElementById("dmConcept").value.trim() || "Botin";
+  // Quitamos acentos/caracteres raros por si la librería codifica en modo byte largo
+  const concept = conceptInput.normalize("NFD").replace(/[\u0300-\u036f]/g, "").slice(0, 25);
 
-  const coins = {
-    platino: parseInt(document.getElementById("dmAmtPlatino").value) || 0,
-    oro: parseInt(document.getElementById("dmAmtOro").value) || 0,
-    plata: parseInt(document.getElementById("dmAmtPlata").value) || 0,
-    cobre: parseInt(document.getElementById("dmAmtCobre").value) || 0
-  };
+  const coins = {};
+  [
+    ["platino", "dmAmtPlatino"],
+    ["oro", "dmAmtOro"],
+    ["plata", "dmAmtPlata"],
+    ["cobre", "dmAmtCobre"]
+  ].forEach(([key, id]) => {
+    const val = parseInt(document.getElementById(id).value, 10) || 0;
+    if (val > 0) coins[key] = val;
+  });
 
-  const hasAny = Object.values(coins).some(v => v > 0);
-  if (!hasAny) {
+  if (Object.keys(coins).length === 0) {
     alert("Ingresa al menos una cantidad mayor a 0 en alguna moneda.");
     return;
   }
 
+  const shortNonce = Math.random().toString(36).substring(2, 8);
   const payload = {
-    type: type === "charge" ? "dm_charge" : "dm_grant",
-    coins: coins,
-    concept: concept,
-    txNonce: type === "grant" ? generateId() : null
+    t: type === "charge" ? "dm_charge" : "dm_grant",
+    c: coins,
+    m: concept
   };
 
+  if (type === "grant") {
+    payload.n = shortNonce;
+  }
+
   const resumen = Object.entries(coins)
-    .filter(([, v]) => v > 0)
     .map(([k, v]) => `${v} ${k.toUpperCase()}`)
     .join(" + ");
 
@@ -1384,7 +1402,7 @@ function processScannedQr(rawText) {
       .join(" + ");
 
     if (confirm(`El DM te cobra ${resumenCobro}\nConcepto: "${payload.concept}"\n\n¿Autorizar pago?`)) {
-      executeDmChargeWithConversion(bankUser.id, bankUser.nombre, payload, payload.concept, fechaActual);
+      executeDmChargeWithConversion(bankUser.id, bankUser.nombre, payload, payload.concept, fechaActual, true);
     }
   }
   
@@ -1411,7 +1429,7 @@ else if (payload.type === "dm_grant") {
           if (add > 0) {
             updates[c] = (w[c] || 0) + add;
             resumenParts.push(`+${add} ${c.toUpperCase()}`);
-            recordTransaction("DM", "Bóveda del Reino (DM)", bankUser.id, bankUser.nombre, add, c, payload.concept, fechaActual);
+            recordTransaction("DM", "Bóveda del Reino (DM)", bankUser.id, bankUser.nombre, add, c, payload.concept, fechaActual,true);
           }
         });
         db.ref(`billeteras/${bankUser.id}`).update(updates).then(() => {
@@ -1448,19 +1466,20 @@ function executeTransfer(fromId, fromName, toId, toName, amount, currency, conce
   }
 }
 
-function recordTransaction(deId, deNombre, paraId, paraNombre, monto, moneda, concepto, fecha) {
-  const txId = 'TX_' + Date.now() + '_' + generateId();
-  db.ref(`transacciones/${txId}`).set({
-    deId,
-    deNombre,
-    paraId,
-    paraNombre,
-    monto,
-    moneda,
-    concepto,
-    fecha
+function recordTransaction(deId, deNombre, paraId, paraNombre, monto, moneda, concepto, fecha, silent = false) {
+  return db.ref("transacciones").push({
+    deId: deId,
+    deNombre: deNombre,
+    paraId: paraId,
+    paraNombre: paraNombre,
+    monto: monto,
+    moneda: moneda,
+    concepto: concepto,
+    fecha: fecha
   }).then(() => {
-    alert(`Operación exitosa: ${monto} ${moneda.toUpperCase()} (${concepto})`);
+    if (!silent) {
+      alert(`¡Movimiento registrado! ${monto} ${moneda.toUpperCase()} (${concepto})`);
+    }
   });
 }
 const COIN_TO_COPPER = {
