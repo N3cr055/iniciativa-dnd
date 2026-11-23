@@ -1346,36 +1346,30 @@ function startQrScanner() {
 
 function stopQrScanner() {
   const readerBox = document.getElementById("qrReaderBox");
-  if (readerBox) readerBox.style.display = "none";
-  if (html5QrScanner) {
-    html5QrScanner.stop().then(() => {
-      html5QrScanner.clear();
-      html5QrScanner = null;
-    }).catch(() => { html5QrScanner = null; });
+  if (readerBox) {
+    readerBox.style.display = "none";
+  }
+
+  if (typeof html5QrCode !== "undefined" && html5QrCode) {
+    try {
+      const stopResult = html5QrCode.stop();
+      if (stopResult && typeof stopResult.catch === "function") {
+        stopResult.catch(() => {});
+      }
+    } catch (_) {
+      // Ignoramos si ya estaba detenido
+    }
   }
 }
 
 function processScannedQr(rawText) {
-  alert("QR leído: " + rawText);
-
   let payload;
   try {
     payload = JSON.parse(rawText);
   } catch (e) {
-    alert("Falló JSON.parse: " + e.message);
+    alert("Código QR no reconocido por el Banco.");
     return;
   }
-
-  if (typeof stopQrScanner === "function") {
-    try {
-      stopQrScanner();
-    } catch (e) {
-      alert("Error en stopQrScanner: " + e.message);
-    }
-  }
-
-  const txType = payload.t || payload.type;
-  alert("Tipo detectado: " + txType + " | bankUser: " + (bankUser ? bankUser.nombre : "NULL"));
 
   const fechaActual = new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
 
