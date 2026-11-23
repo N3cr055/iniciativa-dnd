@@ -1197,25 +1197,26 @@ function initBankDashboard(accountId, displayName, isBankDM) {
 }
 
  // Escucha de historial de transacciones
-  historyListener = db.ref('transacciones').limitToLast(25).on("value", snap => {
+historyListener = db.ref('transacciones').limitToLast(25).on("value", snap => {
     const list = document.getElementById("bankHistoryList");
+    if (!list || !bankUser) return;
     list.innerHTML = "";
     const txs = [];
     snap.forEach(child => { txs.unshift(child.val()); });
 
     txs.forEach(tx => {
-      // El DM audita todas las transacciones; los jugadores solo ven en las que participan
-      if (isBankDM || tx.deId === accountId || tx.paraId === accountId) {
+      if (!tx) return;
+      if (bankUser.isDM || tx.deId === bankUser.id || tx.paraId === bankUser.id) {
         const li = document.createElement("li");
         li.style.cssText = "padding: 6px 0; border-bottom: 1px solid #2a231d; color: #dcdcdc;";
-        const isIncoming = tx.paraId === accountId;
+        const isIncoming = tx.paraId === bankUser.id;
         const color = isIncoming ? "#3a8a06" : "#c12727";
         const sign = isIncoming ? "+" : "-";
 
         li.innerHTML = `
           <div style="display:flex; justify-content:space-between;">
             <strong>${tx.deNombre} ➔ ${tx.paraNombre}</strong>
-            <span style="color:${color}; font-weight:bold;">${sign}${tx.monto} ${tx.moneda.toUpperCase()}</span>
+            <span style="color:${color}; font-weight:bold;">${sign}${tx.monto} ${String(tx.moneda || '').toUpperCase()}</span>
           </div>
           <div style="color:#c9a45d; font-size:0.9em;">"${tx.concepto}"</div>
           <div style="color:#888; font-size:0.75em;">${tx.fecha}</div>

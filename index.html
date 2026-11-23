@@ -257,8 +257,8 @@
     <div id="dmBankTools" style="display:none; background: #2a231d; padding: 12px; border: 1px dashed #c9a45d; margin-bottom: 15px; border-radius: 6px;">
       <h4 style="margin: 0 0 10px 0; color: #c9a45d;">Herramientas del DM</h4>
       <select id="dmTxType" style="margin-bottom: 8px; width: 90%;">
-        <option value="charge">Cobrar al Jugador (Taberna/Tienda)</option>
-        <option value="grant">Entregar Recompensa / Botín</option>
+        <option value="charge">Cobrar al Jugador (Quitar monedas al escanear)</option>
+        <option value="grant">Entregar Recompensa / Botín (Dar monedas al escanear)</option>
       </select>
       <div style="display: flex; gap: 5px; justify-content: center; margin-bottom: 8px;">
         <input type="number" id="dmAmount" placeholder="Cantidad" style="width: 45%;" />
@@ -274,7 +274,7 @@
 
     <!-- Botones de Acción del Jugador -->
     <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 15px;">
-      <button class="player-btn" onclick="showMyReceiveQr()">📲 Mi QR (Recibir)</button>
+      <button class="player-btn" onclick="showMyReceiveQr()">📲 Mi QR (Que me paguen)</button>
       <button class="dm-btn" onclick="startQrScanner()">📷 Escanear QR (Pagar)</button>
     </div>
 
