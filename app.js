@@ -1387,6 +1387,7 @@ function processScannedQr(rawText) {
       executeDmChargeWithConversion(bankUser.id, bankUser.nombre, payload, payload.concept, fechaActual);
     }
   }
+  
   // CASO 3: Botín o Recompensa entregada por el DM
 else if (payload.type === "dm_grant") {
     if (bankUser.isDM) return;
@@ -1419,7 +1420,7 @@ else if (payload.type === "dm_grant") {
       });
     });
   }
-
+}
 function executeTransfer(fromId, fromName, toId, toName, amount, currency, concept, fecha) {
   // Si el origen no es el DM, validamos saldo estricto antes de mover monedas
   if (fromId !== "DM") {
