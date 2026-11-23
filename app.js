@@ -1412,8 +1412,54 @@ function processScannedQr(rawText) {
     }, 600);
   };
 
+  if (!bankUser) {
+    alert("Primero inicia sesión en tu bóveda.");
+    unlockQr();
+    return;
+  }
+
+  // CASO 1: Transferencia entre jugadores (El pagador escanea el QR del receptor)
+  if (txType === "p2p_receive") {
+    if (payload.targetId === bankUser.id) {
+      alert("No puedes transferirte monedas a ti mismo.");
+      unlockQr();
+      return;
+    }
+
+    const monedaInput = prompt(`Transferir a ${payload.targetName}.\nEscribe la moneda (platino, oro, plata o cobre):`, "oro");
+    if (!monedaInput) {
+      unlockQr();
+      return;
+    }
+    const currency = monedaInput.trim().toLowerCase();
+    if (!["platino", "oro", "plata", "cobre"].includes(currency)) {
+      alert("Moneda inválida. Debe ser: platino, oro, plata o cobre.");
+      unlockQr();
+      return;
+    }
+
+    const amount = parseInt(prompt(`¿Cuántas monedas de ${currency.toUpperCase()} deseas enviar a ${payload.targetName}?`), 10);
+    if (isNaN(amount) || amount <= 0) {
+      alert("Cantidad inválida.");
+      unlockQr();
+      return;
+    }
+
+    const conceptP2P = prompt("Concepto obligatorio de la transferencia:");
+    if (!conceptP2P || conceptP2P.trim() === "") {
+      alert("Transferencia cancelada: El concepto es obligatorio.");
+      unlockQr();
+      return;
+    }
+
+    executeTransfer(bankUser.id, bankUser.nombre, payload.targetId, payload.targetName, amount, currency, conceptP2P.trim(), fechaActual);
+    unlockQr();
+    return;
+  }
+
+  // CASO 2: Cobro directo del DM (Taberna, tienda, impuestos)
   if (txType === "dm_charge") {
-    if (!bankUser || bankUser.isDM) {
+    if (bankUser.isDM) {
       alert("El DM no puede pagarse cobros a sí mismo.");
       unlockQr();
       return;
@@ -1445,7 +1491,76 @@ function processScannedQr(rawText) {
     return;
   }
 
-  // ... resto de casos (p2p_receive / dm_grant) llamando a unlockQr() al salir
+  // CASO 3: Botín o Recompensa entregada por el DM
+  if (txType === "dm_grant") {
+    if (bankUser.isDM) {
+      alert("El DM no necesita reclamar botines.");
+      unlockQr();
+      return;
+    }
+
+    const doGrant = () => {
+      db.ref(`billeteras/${bankUser.id}`).once("value", wSnap => {
+        const w = wSnap.val() || {};
+        const updates = {};
+        const resumenParts = [];
+        const writePromises = [];
+
+        ["platino", "oro", "plata", "cobre"].forEach(c => {
+          const add = parseInt(coinsObj[c], 10) || 0;
+          if (add > 0) {
+            updates[c] = (Number(w[c]) || 0) + add;
+            resumenParts.push(`+${add} ${c.toUpperCase()}`);
+            writePromises.push(
+              recordTransaction("DM", "Bóveda del Reino (DM)", bankUser.id, bankUser.nombre, add, c, concept, fechaActual, true)
+            );
+          }
+        });
+
+        if (resumenParts.length === 0) {
+          alert("El botín no contiene monedas válidas.");
+          unlockQr();
+          return;
+        }
+
+        db.ref(`billeteras/${bankUser.id}`).update(updates)
+          .then(() => Promise.all(writePromises))
+          .then(() => {
+            alert(`Botín reclamado (${concept}): ${resumenParts.join(", ")}.`);
+            unlockQr();
+          })
+          .catch(err => {
+            alert("Error al acreditar botín: " + (err && err.message ? err.message : err));
+            unlockQr();
+          });
+      }, err => {
+        alert("Error al leer billetera: " + (err && err.message ? err.message : err));
+        unlockQr();
+      });
+    };
+
+    if (txNonce) {
+      const claimKey = `billeteras/${bankUser.id}/claimed/${txNonce}`;
+      db.ref(claimKey).once("value", snap => {
+        if (snap.exists()) {
+          alert("Ya reclamaste este botín anteriormente.");
+          unlockQr();
+          return;
+        }
+        db.ref(claimKey).set(true)
+          .then(doGrant)
+          .catch(err => {
+            alert("Error al registrar reclamo: " + (err && err.message ? err.message : err));
+            unlockQr();
+          });
+      });
+    } else {
+      doGrant();
+    }
+    return;
+  }
+
+  alert("Tipo de QR no soportado: " + txType);
   unlockQr();
 }
 
