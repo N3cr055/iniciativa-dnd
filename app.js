@@ -1489,6 +1489,7 @@ function recordTransaction(deId, deNombre, paraId, paraNombre, monto, moneda, co
     }
   });
 }
+
 const COIN_TO_COPPER = {
   platino: 1000,
   oro: 100,
@@ -1496,26 +1497,31 @@ const COIN_TO_COPPER = {
   cobre: 1
 };
 
-function executeDmChargeWithConversion(playerId, playerName, payload, concept, fecha) {
+function executeDmChargeWithConversion(playerId, playerName, payload, concept, fecha, silent = true) {
   const coins = payload.coins || payload.c || {};
   let neededCopper = 0;
   const chargeSummaryParts = [];
 
   ["platino", "oro", "plata", "cobre"].forEach(c => {
-    const qty = coinsPayload[c] || 0;
+    const qty = parseInt(coins[c], 10) || 0;
     if (qty > 0) {
       neededCopper += qty * COIN_TO_COPPER[c];
       chargeSummaryParts.push(`${qty} ${c.toUpperCase()}`);
     }
   });
 
+  if (neededCopper <= 0) {
+    alert("El cobro no contiene cantidades válidas.");
+    return;
+  }
+
   db.ref(`billeteras/${playerId}`).once("value", snap => {
     const wallet = snap.val() || {};
     const balances = {
-      platino: wallet.platino || 0,
-      oro: wallet.oro || 0,
-      plata: wallet.plata || 0,
-      cobre: wallet.cobre || 0
+      platino: Number(wallet.platino) || 0,
+      oro: Number(wallet.oro) || 0,
+      plata: Number(wallet.plata) || 0,
+      cobre: Number(wallet.cobre) || 0
     };
 
     const totalAvailableCopper =
@@ -1541,7 +1547,6 @@ function executeDmChargeWithConversion(playerId, playerName, payload, concept, f
       partialNote = " [Pago parcial / consideración]";
     }
 
-    // Preguntamos qué moneda prefiere gastar primero
     const prefRaw = prompt(
       `Tus monedas: ${balances.platino} PP, ${balances.oro} PO, ${balances.plata} PL, ${balances.cobre} PC.\n` +
       `¿Con qué moneda prefieres empezar a pagar? (platino, oro, plata, cobre)`,
@@ -1587,7 +1592,8 @@ function executeDmChargeWithConversion(playerId, playerName, payload, concept, f
             deducted[coin],
             coin,
             `${concept}${partialNote}`,
-            fecha
+            fecha,
+            silent
           )
         );
       }
@@ -1605,6 +1611,8 @@ function executeDmChargeWithConversion(playerId, playerName, payload, concept, f
       cobre: balances.cobre
     }).then(() => Promise.all(writePromises)).then(() => {
       alert(`Pago completado (${concept}): descontado ${paidParts.join(" y ")}.`);
+    }).catch(err => {
+      alert("Error al aplicar el cobro: " + (err && err.message ? err.message : err));
     });
   });
 }
