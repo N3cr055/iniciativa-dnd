@@ -261,14 +261,20 @@
         <option value="charge">Cobrar al Jugador (Quitar monedas al escanear)</option>
         <option value="grant">Entregar Recompensa / Botín (Dar monedas al escanear)</option>
       </select>
-      <div style="display: flex; gap: 5px; justify-content: center; margin-bottom: 8px;">
-        <input type="number" id="dmAmount" placeholder="Cantidad" style="width: 45%;" />
-        <select id="dmCurrency" style="width: 45%;">
-          <option value="platino">Platino (PP)</option>
-          <option value="oro">Oro (PO)</option>
-          <option value="plata">Plata (PP)</option>
-          <option value="cobre">Cobre (PC)</option>
-        </select>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; text-align: left;">
+        <label style="font-size: 0.8em; color: #e5e4e2;">💎 Platino (PP)
+          <input type="number" id="dmAmtPlatino" min="0" placeholder="0" style="width: 100%;" />
+        </label>
+        <label style="font-size: 0.8em; color: #ffd700;">🟡 Oro (PO)
+          <input type="number" id="dmAmtOro" min="0" placeholder="0" style="width: 100%;" />
+        </label>
+        <label style="font-size: 0.8em; color: #c0c0c0;">⚪ Plata (PL)
+          <input type="number" id="dmAmtPlata" min="0" placeholder="0" style="width: 100%;" />
+        </label>
+        <label style="font-size: 0.8em; color: #cd7f32;">🟤 Cobre (PC)
+          <input type="number" id="dmAmtCobre" min="0" placeholder="0" style="width: 100%;" />
+        </label>
+      </div>
       </div>
       <input type="text" id="dmConcept" placeholder="Concepto (ej. Posada, Botín)" style="width: 90%; margin-bottom: 8px;" />
       <button class="dm-btn" onclick="generateDmQr()">Generar QR de Operación</button>

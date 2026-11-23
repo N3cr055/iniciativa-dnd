@@ -1262,26 +1262,36 @@ function showMyReceiveQr() {
 function generateDmQr() {
   if (!bankUser || !bankUser.isDM) return;
   const type = document.getElementById("dmTxType").value; // 'charge' o 'grant'
-  const amount = parseInt(document.getElementById("dmAmount").value);
-  const currency = document.getElementById("dmCurrency").value;
   const concept = document.getElementById("dmConcept").value.trim() || "Operación del Reino";
 
-  if (isNaN(amount) || amount <= 0) {
-    alert("Ingresa una cantidad válida mayor a 0.");
+  const coins = {
+    platino: parseInt(document.getElementById("dmAmtPlatino").value) || 0,
+    oro: parseInt(document.getElementById("dmAmtOro").value) || 0,
+    plata: parseInt(document.getElementById("dmAmtPlata").value) || 0,
+    cobre: parseInt(document.getElementById("dmAmtCobre").value) || 0
+  };
+
+  const hasAny = Object.values(coins).some(v => v > 0);
+  if (!hasAny) {
+    alert("Ingresa al menos una cantidad mayor a 0 en alguna moneda.");
     return;
   }
 
   const payload = {
     type: type === "charge" ? "dm_charge" : "dm_grant",
-    amount: amount,
-    currency: currency,
+    coins: coins,
     concept: concept,
-    txNonce: generateId() // Evita que escaneen el mismo botín dos veces
+    txNonce: type === "grant" ? generateId() : null
   };
 
+  const resumen = Object.entries(coins)
+    .filter(([, v]) => v > 0)
+    .map(([k, v]) => `${v} ${k.toUpperCase()}`)
+    .join(" + ");
+
   const label = type === "charge"
-    ? `ESCANEA para pagar: ${amount} ${currency.toUpperCase()} (${concept})`
-    : `ESCANEA para reclamar: +${amount} ${currency.toUpperCase()} (${concept})`;
+    ? `ESCANEA para pagar: ${resumen} (${concept})`
+    : `ESCANEA para reclamar: +${resumen} (${concept})`;
 
   renderQrCode(payload, label);
 }
@@ -1366,25 +1376,49 @@ function processScannedQr(rawText) {
       alert("El DM no puede pagarse cobros a sí mismo.");
       return;
     }
-    if (confirm(`El DM te cobra ${payload.amount} ${payload.currency.toUpperCase()}\nConcepto: "${payload.concept}"\n\n¿Autorizar pago?`)) {
-      executeDmChargeWithConversion(bankUser.id, bankUser.nombre, payload.amount, payload.currency, payload.concept, fechaActual);
+
+    const coinsObj = payload.coins || (payload.currency ? { [payload.currency]: payload.amount } : {});
+    const resumenCobro = Object.entries(coinsObj)
+      .filter(([, v]) => v > 0)
+      .map(([k, v]) => `${v} ${k.toUpperCase()}`)
+      .join(" + ");
+
+    if (confirm(`El DM te cobra ${resumenCobro}\nConcepto: "${payload.concept}"\n\n¿Autorizar pago?`)) {
+      executeDmChargeWithConversion(bankUser.id, bankUser.nombre, payload, payload.concept, fechaActual);
     }
-  }
+  }S
   // CASO 3: Botín o Recompensa entregada por el DM
-  else if (payload.type === "dm_grant") {
+else if (payload.type === "dm_grant") {
     if (bankUser.isDM) return;
     const claimKey = `billeteras/${bankUser.id}/claimed/${payload.txNonce}`;
-    
+
     db.ref(claimKey).once("value", snap => {
       if (snap.exists()) {
         alert("Ya reclamaste este botín anteriormente.");
         return;
       }
       db.ref(claimKey).set(true);
-      executeTransfer("DM", "Bóveda del Reino (DM)", bankUser.id, bankUser.nombre, payload.amount, payload.currency, payload.concept, fechaActual);
+
+      const coins = payload.coins || { [payload.currency]: payload.amount };
+      const updates = {};
+      const resumenParts = [];
+
+      db.ref(`billeteras/${bankUser.id}`).once("value", wSnap => {
+        const w = wSnap.val() || {};
+        ["platino", "oro", "plata", "cobre"].forEach(c => {
+          const add = coins[c] || 0;
+          if (add > 0) {
+            updates[c] = (w[c] || 0) + add;
+            resumenParts.push(`+${add} ${c.toUpperCase()}`);
+            recordTransaction("DM", "Bóveda del Reino (DM)", bankUser.id, bankUser.nombre, add, c, payload.concept, fechaActual);
+          }
+        });
+        db.ref(`billeteras/${bankUser.id}`).update(updates).then(() => {
+          alert(`Botín reclamado (${payload.concept}): ${resumenParts.join(", ")}`);
+        });
+      });
     });
   }
-}
 
 function executeTransfer(fromId, fromName, toId, toName, amount, currency, concept, fecha) {
   // Si el origen no es el DM, validamos saldo estricto antes de mover monedas
@@ -1435,9 +1469,18 @@ const COIN_TO_COPPER = {
   cobre: 1
 };
 
-function executeDmChargeWithConversion(playerId, playerName, amount, currency, concept, fecha) {
-  const unitCopper = COIN_TO_COPPER[currency] || 100;
-  let neededCopper = amount * unitCopper;
+function executeDmChargeWithConversion(playerId, playerName, payload, concept, fecha) {
+  const coinsPayload = payload.coins || { [payload.currency]: payload.amount };
+  let neededCopper = 0;
+  const chargeSummaryParts = [];
+
+  ["platino", "oro", "plata", "cobre"].forEach(c => {
+    const qty = coinsPayload[c] || 0;
+    if (qty > 0) {
+      neededCopper += qty * COIN_TO_COPPER[c];
+      chargeSummaryParts.push(`${qty} ${c.toUpperCase()}`);
+    }
+  });
 
   db.ref(`billeteras/${playerId}`).once("value", snap => {
     const wallet = snap.val() || {};
@@ -1459,8 +1502,9 @@ function executeDmChargeWithConversion(playerId, playerName, amount, currency, c
 
     if (totalAvailableCopper < neededCopper) {
       const cobrarLoQueTiene = confirm(
+        `Cobro: ${chargeSummaryParts.join(" + ")}.\n` +
         `Te faltan fondos para cubrir el total.\n` +
-        `¿Aceptas que te cobren lo que tienes disponible (${totalAvailableCopper} PC en valor) por consideración de héroes?`
+        `¿Aceptas que te cobren lo que tienes disponible por consideración de héroes?`
       );
       if (!cobrarLoQueTiene) {
         alert("Cobro cancelado por fondos insuficientes.");
@@ -1470,9 +1514,19 @@ function executeDmChargeWithConversion(playerId, playerName, amount, currency, c
       partialNote = " [Pago parcial / consideración]";
     }
 
-    // Descontamos en orden de mayor denominación a menor para cubrir chargeCopper
+    // Preguntamos qué moneda prefiere gastar primero
+    const prefRaw = prompt(
+      `Tus monedas: ${balances.platino} PP, ${balances.oro} PO, ${balances.plata} PL, ${balances.cobre} PC.\n` +
+      `¿Con qué moneda prefieres empezar a pagar? (platino, oro, plata, cobre)`,
+      "oro"
+    );
+    const prefCoin = (prefRaw || "oro").trim().toLowerCase();
+    const baseOrder = ["platino", "oro", "plata", "cobre"];
+    const order = baseOrder.includes(prefCoin)
+      ? [prefCoin, ...baseOrder.filter(c => c !== prefCoin)]
+      : baseOrder;
+
     let remainingToCover = chargeCopper;
-    const order = ["platino", "oro", "plata", "cobre"];
     const deducted = { platino: 0, oro: 0, plata: 0, cobre: 0 };
 
     for (const coin of order) {
@@ -1485,28 +1539,19 @@ function executeDmChargeWithConversion(playerId, playerName, amount, currency, c
       }
     }
 
-    // Si queda un residuo menor a la moneda más baja usada y hay monedas menores, completamos en cobre
     if (remainingToCover > 0 && balances.cobre >= remainingToCover) {
       deducted.cobre += remainingToCover;
       balances.cobre -= remainingToCover;
       remainingToCover = 0;
     }
 
-    const actualPaidCopper = chargeCopper - remainingToCover;
-    if (actualPaidCopper <= 0) {
-      alert("No tienes monedas disponibles para realizar el cobro.");
-      return;
-    }
+    const paidParts = [];
+    const writePromises = [];
 
-    db.ref(`billeteras/${playerId}`).update({
-      platino: balances.platino,
-      oro: balances.oro,
-      plata: balances.plata,
-      cobre: balances.cobre
-    }).then(() => {
-      // Registramos un movimiento por cada moneda efectivamente descontada
-      order.forEach(coin => {
-        if (deducted[coin] > 0) {
+    baseOrder.forEach(coin => {
+      if (deducted[coin] > 0) {
+        paidParts.push(`${deducted[coin]} ${coin.toUpperCase()}`);
+        writePromises.push(
           recordTransaction(
             playerId,
             playerName,
@@ -1516,9 +1561,23 @@ function executeDmChargeWithConversion(playerId, playerName, amount, currency, c
             coin,
             `${concept}${partialNote}`,
             fecha
-          );
-        }
-      });
+          )
+        );
+      }
+    });
+
+    if (paidParts.length === 0) {
+      alert("No tienes monedas disponibles para realizar el cobro.");
+      return;
+    }
+
+    db.ref(`billeteras/${playerId}`).update({
+      platino: balances.platino,
+      oro: balances.oro,
+      plata: balances.plata,
+      cobre: balances.cobre
+    }).then(() => Promise.all(writePromises)).then(() => {
+      alert(`Pago completado (${concept}): descontado ${paidParts.join(" y ")}.`);
     });
   });
 }
