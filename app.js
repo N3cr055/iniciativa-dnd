@@ -1234,21 +1234,21 @@ function renderQrCode(payload, captionText) {
   const qrContainer = document.getElementById("qrcodeCanvas");
   if (!qrContainer) return;
 
-  // Muy importante: limpiar el QR anterior antes de crear el nuevo
   qrContainer.innerHTML = "";
-
   const jsonStr = JSON.stringify(payload);
-  if (jsonStr.length > 220) {
-    alert("El texto del concepto o datos es demasiado largo para un QR. Acorta el concepto.");
+
+  try {
+    new QRCode(qrContainer, {
+      text: jsonStr,
+      width: 170,
+      height: 170,
+      typeNumber: 0,
+      correctLevel: QRCode.CorrectLevel.L
+    });
+  } catch (err) {
+    alert("No cupo el texto en el QR. Usa un concepto más corto.");
     return;
   }
-
-  new QRCode(qrContainer, {
-    text: jsonStr,
-    width: 180,
-    height: 180,
-    correctLevel: QRCode.CorrectLevel.M // 'M' aguanta más datos que 'H' o 'Q'
-  });
 
   const captionEl = document.getElementById("qrCaption");
   if (captionEl) {
