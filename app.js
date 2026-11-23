@@ -1277,9 +1277,10 @@ function generateDmQr() {
     txNonce: generateId() // Evita que escaneen el mismo botín dos veces
   };
 
-  const label = type === "charge" 
-    ? `Cobro DM: ${amount}${currency.toUpperCase()} (${concept})` : `Botín DM: +${amount} ${currency.toUpperCase()} (${concept})`;
-    
+  const label = type === "charge"
+    ? `ESCANEA para pagar: ${amount} ${currency.toUpperCase()} (${concept})`
+    : `ESCANEA para reclamar: +${amount} ${currency.toUpperCase()} (${concept})`;
+
   renderQrCode(payload, label);
 }
 
