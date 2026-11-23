@@ -1,3 +1,10 @@
+window.addEventListener("error", function (event) {
+  alert("Error JS: " + event.message + " (línea " + event.lineno + ")");
+});
+
+window.addEventListener("unhandledrejection", function (event) {
+  alert("Error Promesa: " + (event.reason && event.reason.message ? event.reason.message : event.reason));
+});
 // --- CONFIGURACIÓN DE FIREBASE ---
 const firebaseConfig = {
   apiKey: "AIzaSyAgmLWiIGIFcxG7OIu_SIlKn6WAkrdVrs",
