@@ -1356,13 +1356,26 @@ function stopQrScanner() {
 }
 
 function processScannedQr(rawText) {
+  alert("QR leído: " + rawText);
+
   let payload;
   try {
     payload = JSON.parse(rawText);
   } catch (e) {
-    alert("Código QR no reconocido por el Banco.");
+    alert("Falló JSON.parse: " + e.message);
     return;
   }
+
+  if (typeof stopQrScanner === "function") {
+    try {
+      stopQrScanner();
+    } catch (e) {
+      alert("Error en stopQrScanner: " + e.message);
+    }
+  }
+
+  const txType = payload.t || payload.type;
+  alert("Tipo detectado: " + txType + " | bankUser: " + (bankUser ? bankUser.nombre : "NULL"));
 
   const fechaActual = new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
 
