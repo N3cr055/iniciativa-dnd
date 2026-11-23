@@ -1371,10 +1371,18 @@ function processScannedQr(rawText) {
     return;
   }
 
+  if (typeof stopQrScanner === "function") {
+    stopQrScanner();
+  }
+
   const fechaActual = new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+  const txType = payload.t || payload.type;
+  const coinsObj = payload.c || payload.coins || (payload.currency ? { [payload.currency]: payload.amount } : {});
+  const concept = payload.m || payload.concept || "Operación";
+  const txNonce = payload.n || payload.txNonce;
 
   // CASO 1: Transferencia entre jugadores (El pagador escanea el QR del receptor)
-  if (payload.type === "p2p_receive") {
+  if (txType === "p2p_receive") {
     if (payload.targetId === bankUser.id) {
       alert("No puedes transferirte monedas a ti mismo.");
       return;
@@ -1388,71 +1396,99 @@ function processScannedQr(rawText) {
       return;
     }
 
-    const amount = parseInt(prompt(`¿Cuántas monedas de ${currency.toUpperCase()} deseas enviar a${payload.targetName}?`));
+    const amount = parseInt(prompt(`¿Cuántas monedas de ${currency.toUpperCase()} deseas enviar a ${payload.targetName}?`));
     if (isNaN(amount) || amount <= 0) {
       alert("Cantidad inválida.");
       return;
     }
 
-    const concept = prompt("Concepto obligatorio de la transferencia:");
-    if (!concept || concept.trim() === "") {
+    const conceptP2P = prompt("Concepto obligatorio de la transferencia:");
+    if (!conceptP2P || conceptP2P.trim() === "") {
       alert("Transferencia cancelada: El concepto es obligatorio.");
       return;
     }
 
-    executeTransfer(bankUser.id, bankUser.nombre, payload.targetId, payload.targetName, amount, currency, concept.trim(), fechaActual);
-  } 
+    executeTransfer(bankUser.id, bankUser.nombre, payload.targetId, payload.targetName, amount, currency, conceptP2P.trim(), fechaActual);
+  }
   // CASO 2: Cobro directo del DM (Taberna, tienda, impuestos)
-  else if (payload.type === "dm_charge") {
+  else if (txType === "dm_charge") {
     if (bankUser.isDM) {
       alert("El DM no puede pagarse cobros a sí mismo.");
       return;
     }
 
-    const coinsObj = payload.coins || (payload.currency ? { [payload.currency]: payload.amount } : {});
     const resumenCobro = Object.entries(coinsObj)
-      .filter(([, v]) => v > 0)
+      .filter(([, v]) => (Number(v) || 0) > 0)
       .map(([k, v]) => `${v} ${k.toUpperCase()}`)
       .join(" + ");
 
-    if (confirm(`El DM te cobra ${resumenCobro}\nConcepto: "${payload.concept}"\n\n¿Autorizar pago?`)) {
-      executeDmChargeWithConversion(bankUser.id, bankUser.nombre, payload, payload.concept, fechaActual, true);
+    if (!resumenCobro) {
+      alert("El cobro no contiene monedas válidas.");
+      return;
+    }
+
+    if (confirm(`El DM te cobra ${resumenCobro}\nConcepto: "${concept}"\n\n¿Autorizar pago?`)) {
+      // Pasamos tanto `coins: coinsObj` como `c: coinsObj` por si tu función lee cualquiera de los dos
+      executeDmChargeWithConversion(
+        bankUser.id,
+        bankUser.nombre,
+        { ...payload, coins: coinsObj, c: coinsObj },
+        concept,
+        fechaActual,
+        true
+      );
     }
   }
-  
   // CASO 3: Botín o Recompensa entregada por el DM
-else if (payload.type === "dm_grant") {
+  else if (txType === "dm_grant") {
     if (bankUser.isDM) return;
-    const claimKey = `billeteras/${bankUser.id}/claimed/${payload.txNonce}`;
 
-    db.ref(claimKey).once("value", snap => {
-      if (snap.exists()) {
-        alert("Ya reclamaste este botín anteriormente.");
-        return;
-      }
-      db.ref(claimKey).set(true);
-
-      const coins = payload.coins || { [payload.currency]: payload.amount };
+    const doGrant = () => {
       const updates = {};
       const resumenParts = [];
+      const writePromises = [];
 
       db.ref(`billeteras/${bankUser.id}`).once("value", wSnap => {
         const w = wSnap.val() || {};
         ["platino", "oro", "plata", "cobre"].forEach(c => {
-          const add = coins[c] || 0;
+          const add = parseInt(coinsObj[c], 10) || 0;
           if (add > 0) {
-            updates[c] = (w[c] || 0) + add;
+            updates[c] = (Number(w[c]) || 0) + add;
             resumenParts.push(`+${add} ${c.toUpperCase()}`);
-            recordTransaction("DM", "Bóveda del Reino (DM)", bankUser.id, bankUser.nombre, add, c, payload.concept, fechaActual,true);
+            writePromises.push(
+              recordTransaction("DM", "Bóveda del Reino (DM)", bankUser.id, bankUser.nombre, add, c, concept, fechaActual, true)
+            );
           }
         });
-        db.ref(`billeteras/${bankUser.id}`).update(updates).then(() => {
-          alert(`Botín reclamado (${payload.concept}): ${resumenParts.join(", ")}`);
-        });
+
+        if (resumenParts.length === 0) {
+          alert("El botín no contiene monedas válidas.");
+          return;
+        }
+
+        db.ref(`billeteras/${bankUser.id}`).update(updates)
+          .then(() => Promise.all(writePromises))
+          .then(() => {
+            alert(`Botín reclamado (${concept}): ${resumenParts.join(", ")}`);
+          });
       });
-    });
+    };
+
+    if (txNonce) {
+      const claimKey = `billeteras/${bankUser.id}/claimed/${txNonce}`;
+      db.ref(claimKey).once("value", snap => {
+        if (snap.exists()) {
+          alert("Ya reclamaste este botín anteriormente.");
+          return;
+        }
+        db.ref(claimKey).set(true).then(doGrant);
+      });
+    } else {
+      doGrant();
+    }
   }
 }
+
 function executeTransfer(fromId, fromName, toId, toName, amount, currency, concept, fecha) {
   // Si el origen no es el DM, validamos saldo estricto antes de mover monedas
   if (fromId !== "DM") {
@@ -1504,7 +1540,7 @@ const COIN_TO_COPPER = {
 };
 
 function executeDmChargeWithConversion(playerId, playerName, payload, concept, fecha) {
-  const coinsPayload = payload.coins || { [payload.currency]: payload.amount };
+  const coins = payload.coins || payload.c || {};
   let neededCopper = 0;
   const chargeSummaryParts = [];
 
