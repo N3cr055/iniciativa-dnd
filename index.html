@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Turno Crítico - Combat Tracker</title>
@@ -47,6 +49,8 @@
   <!-- Solo dejamos el código de la sala -->
   <input type="text" id="roomInput" placeholder="Código de sala" />
   <button class="player-btn" onclick="joinRoom()">Unirse a Sala</button>
+  <br><br>
+  <button class="dm-btn" onclick="openBankLogin()" style="width: 80%; background-color: #3d3122; border: 1px solid #c9a45d;">💰 Banco y Monedero</button>
 </div>
 
     <div id="playerSetup" style="display:none;">
@@ -225,7 +229,74 @@
       </div>
     </div>
   </div>
+<!-- VISTA INDEPENDIENTE DEL BANCO / MONEDERO -->
+<div id="bankView" style="display:none; text-align: center;">
+  <h2>Banco del Aventurero</h2>
+  <button onclick="closeBankView()" style="background-color: #444; margin-bottom: 15px;">⬅ Volver al Menú</button>
 
+  <!-- Login / Creación de Cuenta -->
+  <div id="bankLoginSection" style="background: #2a231d; padding: 15px; border: 1px solid #5a4b3a; border-radius: 6px; max-width: 320px; margin: 0 auto;">
+    <h4 style="color: #c9a45d; margin-top: 0;">Acceso a Bóveda</h4>
+    <input type="text" id="bankUserName" placeholder="Nombre de Personaje (o 'DM')" style="width: 90%; margin-bottom: 10px;" />
+    <input type="password" id="bankUserPin" placeholder="PIN de 4 dígitos" maxlength="4" style="width: 90%; margin-bottom: 10px;" />
+    <button class="player-btn" onclick="loginToBank()" style="width: 95%;">Entrar / Crear Cuenta</button>
+  </div>
+
+  <!-- Panel Principal de la Cuenta -->
+  <div id="bankDashboard" style="display:none;">
+    <div style="background: #1a1612; border: 2px solid #c9a45d; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+      <h3 id="bankAccountTitle" style="margin: 0 0 10px 0; color: #c9a45d;">Cuenta</h3>
+      <div style="display: flex; justify-content: space-around; font-size: 1.2em; font-weight: bold;">
+        <span style="color: #ffd700;">🟡 <span id="balGold">0</span> PO</span>
+        <span style="color: #c0c0c0;">⚪ <span id="balSilver">0</span> PP</span>
+        <span style="color: #cd7f32;">🟤 <span id="balCopper">0</span> PC</span>
+      </div>
+    </div>
+
+    <!-- Controles Exclusivos del DM (Generar Cobro o Recompensa) -->
+    <div id="dmBankTools" style="display:none; background: #2a231d; padding: 12px; border: 1px dashed #c9a45d; margin-bottom: 15px; border-radius: 6px;">
+      <h4 style="margin: 0 0 10px 0; color: #c9a45d;">Herramientas del DM</h4>
+      <select id="dmTxType" style="margin-bottom: 8px; width: 90%;">
+        <option value="charge">Cobrar al Jugador (Taberna/Tienda)</option>
+        <option value="grant">Entregar Recompensa / Botín</option>
+      </select>
+      <div style="display: flex; gap: 5px; justify-content: center; margin-bottom: 8px;">
+        <input type="number" id="dmAmount" placeholder="Cantidad" style="width: 45%;" />
+        <select id="dmCurrency" style="width: 45%;">
+          <option value="oro">Oro (PO)</option>
+          <option value="plata">Plata (PP)</option>
+          <option value="cobre">Cobre (PC)</option>
+        </select>
+      </div>
+      <input type="text" id="dmConcept" placeholder="Concepto (ej. Posada, Botín)" style="width: 90%; margin-bottom: 8px;" />
+      <button class="dm-btn" onclick="generateDmQr()">Generar QR de Operación</button>
+    </div>
+
+    <!-- Botones de Acción del Jugador -->
+    <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 15px;">
+      <button class="player-btn" onclick="showMyReceiveQr()">📲 Mi QR (Recibir)</button>
+      <button class="dm-btn" onclick="startQrScanner()">📷 Escanear QR (Pagar)</button>
+    </div>
+
+    <!-- Contenedor donde aparece el QR generado -->
+    <div id="qrDisplayBox" style="display:none; background: white; padding: 15px; border-radius: 8px; width: fit-content; margin: 15px auto; text-align: center;">
+      <div id="qrcodeCanvas"></div>
+      <p id="qrCaption" style="color: #1a1612; font-weight: bold; margin: 10px 0 0 0; font-size: 0.9em;"></p>
+    </div>
+
+    <!-- Contenedor de la Cámara para Escanear -->
+    <div id="qrReaderBox" style="display:none; max-width: 300px; margin: 15px auto;">
+      <div id="qr-reader" style="width: 100%;"></div>
+      <button onclick="stopQrScanner()" style="background: #6b2b2b; margin-top: 8px;">Cerrar Cámara</button>
+    </div>
+
+    <!-- Estado de Cuenta / Historial -->
+    <div style="text-align: left; background: #1a1612; padding: 10px; border-radius: 6px; border: 1px solid #5a4b3a; max-height: 220px; overflow-y: auto;">
+      <h4 style="margin: 0 0 8px 0; color: #c9a45d; border-bottom: 1px solid #4a3f35; padding-bottom: 4px;">Últimos Movimientos</h4>
+      <ul id="bankHistoryList" style="list-style: none; padding: 0; margin: 0; font-size: 0.85em;"></ul>
+    </div>
+  </div>
+</div>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="app.js"></script>

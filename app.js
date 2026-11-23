@@ -1106,3 +1106,321 @@ function quickAddMonster(name, hp, dexMod, cr = "") {
     // Enfocamos automáticamente la casilla del d20
     document.getElementById('enemyInit').focus();
 }
+
+// =========================================================
+// --- MÓDULO DE BANCO Y TRANSFERENCIAS QR (INDEPENDIENTE) ---
+// =========================================================
+let bankUser = null;
+let bankListener = null;
+let historyListener = null;
+let html5QrScanner = null;
+
+function openBankLogin() {
+  document.getElementById("createOrJoin").style.display = "none";
+  document.getElementById("bankView").style.display = "block";
+  document.getElementById("bankLoginSection").style.display = "block";
+  document.getElementById("bankDashboard").style.display = "none";
+  
+  // Autocompleta el nombre si ya lo tiene guardado en el dispositivo
+  const savedName = localStorage.getItem('dnd_playerName') || '';
+  if (savedName) document.getElementById("bankUserName").value = savedName;
+}
+
+function closeBankView() {
+  stopQrScanner();
+  if (bankListener && bankUser) {
+  db.ref(`billeteras/${bankUser.id}`).off("value", bankListener);
+bankListener = null;
+}
+if (historyListener) {
+  db.ref('transacciones').off("value", historyListener);
+  historyListener = null;
+}
+bankUser = null;
+document.getElementById("qrDisplayBox").style.display = "none";
+document.getElementById("bankView").style.display = "none";
+document.getElementById("createOrJoin").style.display = "block";
+}
+
+function loginToBank() {
+  const rawName = document.getElementById("bankUserName").value.trim();
+  const pin = document.getElementById("bankUserPin").value.trim();
+
+  if (!rawName || pin.length !== 4 || isNaN(pin)) {
+    alert("Ingresa tu nombre de personaje (o 'DM') y un PIN numérico de 4 dígitos.");
+    return;
+  }
+
+  const accountId = rawName.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+  const isBankDM = accountId === 'DM';
+
+  db.ref(`billeteras/${accountId}`).once("value", snapshot => {
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      if (data.pin !== pin) {
+        alert("PIN incorrecto para esta bóveda.");
+        return;
+      }
+      initBankDashboard(accountId, data.nombre, isBankDM);
+    } else {
+      if (confirm(`No existe bóveda para "${rawName}". ¿Crear cuenta nueva con este PIN?`)) {
+        const newAccount = {
+          nombre: rawName,
+          pin: pin,
+          oro: 0,
+          plata: 0,
+          cobre: 0
+        };
+        db.ref(`billeteras/${accountId}`).set(newAccount).then(() => {
+          initBankDashboard(accountId, rawName, isBankDM);
+        });
+      }
+    }
+  });
+}
+
+function initBankDashboard(accountId, displayName, isBankDM) {
+  bankUser = { id: accountId, nombre: displayName, isDM: isBankDM };
+  document.getElementById("bankLoginSection").style.display = "none";
+  document.getElementById("bankDashboard").style.display = "block";
+  document.getElementById("bankAccountTitle").textContent = isBankDM ? "Bóveda del Reino (DM)" : `Bóveda de ${displayName}`;
+  document.getElementById("dmBankTools").style.display = isBankDM ? "block" : "none";
+
+  // Escucha de saldo en tiempo real
+  bankListener = db.ref(`billeteras/${accountId}`).on("value", snap => {
+    const val = snap.val();
+    if (!val) return;
+    document.getElementById("balGold").textContent = isBankDM ? "∞" : (val.oro || 0);
+    document.getElementById("balSilver").textContent = isBankDM ? "∞" : (val.plata || 0);
+    document.getElementById("balCopper").textContent = isBankDM ? "∞" : (val.cobre || 0);
+  });
+}
+
+ // Escucha de historial de transacciones
+  historyListener = db.ref('transacciones').limitToLast(25).on("value", snap => {
+    const list = document.getElementById("bankHistoryList");
+    list.innerHTML = "";
+    const txs = [];
+    snap.forEach(child => { txs.unshift(child.val()); });
+
+    txs.forEach(tx => {
+      // El DM audita todas las transacciones; los jugadores solo ven en las que participan
+      if (isBankDM || tx.deId === accountId || tx.paraId === accountId) {
+        const li = document.createElement("li");
+        li.style.cssText = "padding: 6px 0; border-bottom: 1px solid #2a231d; color: #dcdcdc;";
+        const isIncoming = tx.paraId === accountId;
+        const color = isIncoming ? "#3a8a06" : "#c12727";
+        const sign = isIncoming ? "+" : "-";
+
+        li.innerHTML = `
+          <div style="display:flex; justify-content:space-between;">
+            <strong>${tx.deNombre} ➔ ${tx.paraNombre}</strong>
+            <span style="color:${color}; font-weight:bold;">${sign}${tx.monto} ${tx.moneda.toUpperCase()}</span>
+          </div>
+          <div style="color:#c9a45d; font-size:0.9em;">"${tx.concepto}"</div>
+          <div style="color:#888; font-size:0.75em;">${tx.fecha}</div>
+        `;
+        list.appendChild(li);
+      }
+    });
+  });
+
+
+// --- GENERACIÓN DE CÓDIGOS QR ---
+function renderQrCode(payloadObj, captionText) {
+  stopQrScanner();
+  const displayBox = document.getElementById("qrDisplayBox");
+  const canvas = document.getElementById("qrcodeCanvas");
+  canvas.innerHTML = "";
+  
+  new QRCode(canvas, {
+    text: JSON.stringify(payloadObj),
+    width: 180,
+    height: 180,
+    colorDark: "#1a1612",
+    colorLight: "#ffffff",
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  document.getElementById("qrCaption").textContent = captionText;
+  displayBox.style.display = "block";
+}
+
+function showMyReceiveQr() {
+  if (!bankUser) return;
+  const payload = {
+    type: "p2p_receive",
+    targetId: bankUser.id,
+    targetName: bankUser.nombre
+  };
+  renderQrCode(payload, `Pagar a: ${bankUser.nombre}`);
+}
+
+function generateDmQr() {
+  if (!bankUser || !bankUser.isDM) return;
+  const type = document.getElementById("dmTxType").value; // 'charge' o 'grant'
+  const amount = parseInt(document.getElementById("dmAmount").value);
+  const currency = document.getElementById("dmCurrency").value;
+  const concept = document.getElementById("dmConcept").value.trim() || "Operación del Reino";
+
+  if (isNaN(amount) || amount <= 0) {
+    alert("Ingresa una cantidad válida mayor a 0.");
+    return;
+  }
+
+  const payload = {
+    type: type === "charge" ? "dm_charge" : "dm_grant",
+    amount: amount,
+    currency: currency,
+    concept: concept,
+    txNonce: generateId() // Evita que escaneen el mismo botín dos veces
+  };
+
+  const label = type === "charge" 
+    ? `Cobro DM: ${amount}${currency.toUpperCase()} (${concept})` : `Botín DM: +${amount} ${currency.toUpperCase()} (${concept})`;
+    
+  renderQrCode(payload, label);
+}
+
+// --- ESCÁNER DE CÁMARA Y PROCESAMIENTO ---
+function startQrScanner() {
+  document.getElementById("qrDisplayBox").style.display = "none";
+  const readerBox = document.getElementById("qrReaderBox");
+  readerBox.style.display = "block";
+
+  if (html5QrScanner) return;
+
+  html5QrScanner = new Html5Qrcode("qr-reader");
+  html5QrScanner.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: { width: 220, height: 220 } },
+    (decodedText) => {
+      stopQrScanner();
+      processScannedQr(decodedText);
+    },
+    (errorMessage) => { /* Ignorar errores de lectura por frame */ }
+  ).catch(err => {
+    alert("No se pudo acceder a la cámara (asegúrate de usar HTTPS y dar permisos).");
+    stopQrScanner();
+  });
+}
+
+function stopQrScanner() {
+  const readerBox = document.getElementById("qrReaderBox");
+  if (readerBox) readerBox.style.display = "none";
+  if (html5QrScanner) {
+    html5QrScanner.stop().then(() => {
+      html5QrScanner.clear();
+      html5QrScanner = null;
+    }).catch(() => { html5QrScanner = null; });
+  }
+}
+
+function processScannedQr(rawText) {
+  let payload;
+  try {
+    payload = JSON.parse(rawText);
+  } catch (e) {
+    alert("Código QR no reconocido por el Banco.");
+    return;
+  }
+
+  const fechaActual = new Date().toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+
+  // CASO 1: Transferencia entre jugadores (El pagador escanea el QR del receptor)
+  if (payload.type === "p2p_receive") {
+    if (payload.targetId === bankUser.id) {
+      alert("No puedes transferirte monedas a ti mismo.");
+      return;
+    }
+
+    const monedaInput = prompt(`Transferir a ${payload.targetName}.\nEscribe la moneda (oro, plata o cobre):`, "oro");
+    if (!monedaInput) return;
+    const currency = monedaInput.trim().toLowerCase();
+    if (!["oro", "plata", "cobre"].includes(currency)) {
+      alert("Moneda inválida. Debe ser: oro, plata o cobre.");
+      return;
+    }
+
+    const amount = parseInt(prompt(`¿Cuántas monedas de ${currency.toUpperCase()} deseas enviar a${payload.targetName}?`));
+    if (isNaN(amount) || amount <= 0) {
+      alert("Cantidad inválida.");
+      return;
+    }
+
+    const concept = prompt("Concepto obligatorio de la transferencia:");
+    if (!concept || concept.trim() === "") {
+      alert("Transferencia cancelada: El concepto es obligatorio.");
+      return;
+    }
+
+    executeTransfer(bankUser.id, bankUser.nombre, payload.targetId, payload.targetName, amount, currency, concept.trim(), fechaActual);
+  } 
+  // CASO 2: Cobro directo del DM (Taberna, tienda, impuestos)
+  else if (payload.type === "dm_charge") {
+    if (bankUser.isDM) {
+      alert("El DM no puede pagarse cobros a sí mismo.");
+      return;
+    }
+    if (confirm(`El DM te cobra ${payload.amount} ${payload.currency.toUpperCase()}\nConcepto: "${payload.concept}"\n\n¿Autorizar pago?`)) {
+      executeTransfer(bankUser.id, bankUser.nombre, "DM", "Bóveda del Reino (DM)", payload.amount, payload.currency, payload.concept, fechaActual);
+    }
+  } 
+  // CASO 3: Botín o Recompensa entregada por el DM
+  else if (payload.type === "dm_grant") {
+    if (bankUser.isDM) return;
+    const claimKey = `billeteras/${bankUser.id}/claimed/${payload.txNonce}`;
+    
+    db.ref(claimKey).once("value", snap => {
+      if (snap.exists()) {
+        alert("Ya reclamaste este botín anteriormente.");
+        return;
+      }
+      db.ref(claimKey).set(true);
+      executeTransfer("DM", "Bóveda del Reino (DM)", bankUser.id, bankUser.nombre, payload.amount, payload.currency, payload.concept, fechaActual);
+    });
+  }
+}
+
+function executeTransfer(fromId, fromName, toId, toName, amount, currency, concept, fecha) {
+  // Si el origen no es el DM, validamos saldo estricto antes de mover monedas
+  if (fromId !== "DM") {
+    db.ref(`billeteras/${fromId}/${currency}`).once("value", snap => {
+      const currentBal = snap.val() || 0;
+      if (currentBal < amount) {
+        alert(`Fondos insuficientes. Solo tienes ${currentBal} ${currency.toUpperCase()}.`);
+        return;
+      }
+
+      // Descontamos al pagador
+      db.ref(`billeteras/${fromId}/${currency}`).set(currentBal - amount);
+
+      // Sumamos al receptor (si no es el DM)
+      if (toId !== "DM") {
+        db.ref(`billeteras/${toId}/${currency}`).transaction(curr => (curr || 0) + amount);
+      }
+
+      recordTransaction(fromId, fromName, toId, toName, amount, currency, concept, fecha);
+    });
+  } else {
+    // Entrega directa desde el DM
+    db.ref(`billeteras/${toId}/${currency}`).transaction(curr => (curr || 0) + amount);
+    recordTransaction(fromId, fromName, toId, toName, amount, currency, concept, fecha);
+  }
+}
+
+function recordTransaction(deId, deNombre, paraId, paraNombre, monto, moneda, concepto, fecha) {
+  const txId = 'TX_' + Date.now() + '_' + generateId();
+  db.ref(`transacciones/${txId}`).set({
+    deId,
+    deNombre,
+    paraId,
+    paraNombre,
+    monto,
+    moneda,
+    concepto,
+    fecha
+  }).then(() => {
+    alert(`Operación exitosa: ${monto} ${moneda.toUpperCase()} (${concepto})`);
+  });
+}
