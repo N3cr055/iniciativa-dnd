@@ -1167,6 +1167,7 @@ function loginToBank() {
         const newAccount = {
           nombre: rawName,
           pin: pin,
+          platino: 0,
           oro: 0,
           plata: 0,
           cobre: 0
@@ -1190,6 +1191,7 @@ function initBankDashboard(accountId, displayName, isBankDM) {
   bankListener = db.ref(`billeteras/${accountId}`).on("value", snap => {
     const val = snap.val();
     if (!val) return;
+    document.getElementById("balPlatinum").textContent = isBankDM ? "∞" : (val.platino || 0);
     document.getElementById("balGold").textContent = isBankDM ? "∞" : (val.oro || 0);
     document.getElementById("balSilver").textContent = isBankDM ? "∞" : (val.plata || 0);
     document.getElementById("balCopper").textContent = isBankDM ? "∞" : (val.cobre || 0);
@@ -1339,7 +1341,7 @@ function processScannedQr(rawText) {
     const monedaInput = prompt(`Transferir a ${payload.targetName}.\nEscribe la moneda (oro, plata o cobre):`, "oro");
     if (!monedaInput) return;
     const currency = monedaInput.trim().toLowerCase();
-    if (!["oro", "plata", "cobre"].includes(currency)) {
+    if (!["platino", "oro", "plata", "cobre"].includes(currency)) {
       alert("Moneda inválida. Debe ser: oro, plata o cobre.");
       return;
     }
@@ -1365,9 +1367,9 @@ function processScannedQr(rawText) {
       return;
     }
     if (confirm(`El DM te cobra ${payload.amount} ${payload.currency.toUpperCase()}\nConcepto: "${payload.concept}"\n\n¿Autorizar pago?`)) {
-      executeTransfer(bankUser.id, bankUser.nombre, "DM", "Bóveda del Reino (DM)", payload.amount, payload.currency, payload.concept, fechaActual);
+      executeDmChargeWithConversion(bankUser.id, bankUser.nombre, payload.amount, payload.currency, payload.concept, fechaActual);
     }
-  } 
+  }
   // CASO 3: Botín o Recompensa entregada por el DM
   else if (payload.type === "dm_grant") {
     if (bankUser.isDM) return;
@@ -1424,5 +1426,99 @@ function recordTransaction(deId, deNombre, paraId, paraNombre, monto, moneda, co
     fecha
   }).then(() => {
     alert(`Operación exitosa: ${monto} ${moneda.toUpperCase()} (${concepto})`);
+  });
+}
+const COIN_TO_COPPER = {
+  platino: 1000,
+  oro: 100,
+  plata: 10,
+  cobre: 1
+};
+
+function executeDmChargeWithConversion(playerId, playerName, amount, currency, concept, fecha) {
+  const unitCopper = COIN_TO_COPPER[currency] || 100;
+  let neededCopper = amount * unitCopper;
+
+  db.ref(`billeteras/${playerId}`).once("value", snap => {
+    const wallet = snap.val() || {};
+    const balances = {
+      platino: wallet.platino || 0,
+      oro: wallet.oro || 0,
+      plata: wallet.plata || 0,
+      cobre: wallet.cobre || 0
+    };
+
+    const totalAvailableCopper =
+      balances.platino * COIN_TO_COPPER.platino +
+      balances.oro * COIN_TO_COPPER.oro +
+      balances.plata * COIN_TO_COPPER.plata +
+      balances.cobre * COIN_TO_COPPER.cobre;
+
+    let chargeCopper = neededCopper;
+    let partialNote = "";
+
+    if (totalAvailableCopper < neededCopper) {
+      const cobrarLoQueTiene = confirm(
+        `Te faltan fondos para cubrir el total.\n` +
+        `¿Aceptas que te cobren lo que tienes disponible (${totalAvailableCopper} PC en valor) por consideración de héroes?`
+      );
+      if (!cobrarLoQueTiene) {
+        alert("Cobro cancelado por fondos insuficientes.");
+        return;
+      }
+      chargeCopper = totalAvailableCopper;
+      partialNote = " [Pago parcial / consideración]";
+    }
+
+    // Descontamos en orden de mayor denominación a menor para cubrir chargeCopper
+    let remainingToCover = chargeCopper;
+    const order = ["platino", "oro", "plata", "cobre"];
+    const deducted = { platino: 0, oro: 0, plata: 0, cobre: 0 };
+
+    for (const coin of order) {
+      const valPerCoin = COIN_TO_COPPER[coin];
+      const maxUsable = Math.min(balances[coin], Math.floor(remainingToCover / valPerCoin));
+      if (maxUsable > 0) {
+        deducted[coin] = maxUsable;
+        balances[coin] -= maxUsable;
+        remainingToCover -= maxUsable * valPerCoin;
+      }
+    }
+
+    // Si queda un residuo menor a la moneda más baja usada y hay monedas menores, completamos en cobre
+    if (remainingToCover > 0 && balances.cobre >= remainingToCover) {
+      deducted.cobre += remainingToCover;
+      balances.cobre -= remainingToCover;
+      remainingToCover = 0;
+    }
+
+    const actualPaidCopper = chargeCopper - remainingToCover;
+    if (actualPaidCopper <= 0) {
+      alert("No tienes monedas disponibles para realizar el cobro.");
+      return;
+    }
+
+    db.ref(`billeteras/${playerId}`).update({
+      platino: balances.platino,
+      oro: balances.oro,
+      plata: balances.plata,
+      cobre: balances.cobre
+    }).then(() => {
+      // Registramos un movimiento por cada moneda efectivamente descontada
+      order.forEach(coin => {
+        if (deducted[coin] > 0) {
+          recordTransaction(
+            playerId,
+            playerName,
+            "DM",
+            "Bóveda del Reino (DM)",
+            deducted[coin],
+            coin,
+            `${concept}${partialNote}`,
+            fecha
+          );
+        }
+      });
+    });
   });
 }

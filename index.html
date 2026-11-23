@@ -246,9 +246,10 @@
   <div id="bankDashboard" style="display:none;">
     <div style="background: #1a1612; border: 2px solid #c9a45d; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
       <h3 id="bankAccountTitle" style="margin: 0 0 10px 0; color: #c9a45d;">Cuenta</h3>
-      <div style="display: flex; justify-content: space-around; font-size: 1.2em; font-weight: bold;">
+<div style="display: flex; justify-content: space-around; font-size: 1.1em; font-weight: bold; flex-wrap: wrap; gap: 8px;">
+        <span style="color: #e5e4e2;">💎 <span id="balPlatinum">0</span> PP</span>
         <span style="color: #ffd700;">🟡 <span id="balGold">0</span> PO</span>
-        <span style="color: #c0c0c0;">⚪ <span id="balSilver">0</span> PP</span>
+        <span style="color: #c0c0c0;">⚪ <span id="balSilver">0</span> PL</span>
         <span style="color: #cd7f32;">🟤 <span id="balCopper">0</span> PC</span>
       </div>
     </div>
@@ -263,6 +264,7 @@
       <div style="display: flex; gap: 5px; justify-content: center; margin-bottom: 8px;">
         <input type="number" id="dmAmount" placeholder="Cantidad" style="width: 45%;" />
         <select id="dmCurrency" style="width: 45%;">
+          <option value="platino">Platino (PP)</option>
           <option value="oro">Oro (PO)</option>
           <option value="plata">Plata (PP)</option>
           <option value="cobre">Cobre (PC)</option>
